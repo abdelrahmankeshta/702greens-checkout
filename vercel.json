@@ -1,0 +1,15 @@
+{
+    "buildCommand": "cd 702greens-checkout-frontend && npm install && npm run build",
+    "outputDirectory": "702greens-checkout-frontend/dist",
+    "framework": null,
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "/api/server"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}
