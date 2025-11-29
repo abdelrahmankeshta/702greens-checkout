@@ -20,7 +20,7 @@ app.use(cors({
 
 // Use JSON parser for all non-webhook routes
 app.use((req, res, next) => {
-    if (req.originalUrl === '/webhook') {
+    if (req.originalUrl === '/api/webhook') {
         next();
     } else {
         express.json()(req, res, next);
@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 });
 
 // Fetch active subscription products and one-time products
-app.get('/products', async (req, res) => {
+app.get('/api/products', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
@@ -108,7 +108,7 @@ app.get('/products', async (req, res) => {
 });
 
 // Proxy endpoint for Stripe images
-app.get('/product-image', async (req, res) => {
+app.get('/api/product-image', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).send('URL is required');
 
@@ -180,7 +180,7 @@ const formatHumanDate = (timestamp) => {
 };
 
 // Validate Discount Code Endpoint
-app.post('/validate-discount', async (req, res) => {
+app.post('/api/validate-discount', async (req, res) => {
     try {
         const { code, orderTotal } = req.body;
 
@@ -248,7 +248,7 @@ app.post('/validate-discount', async (req, res) => {
 });
 
 // Check Email Endpoint
-app.get('/check-email', async (req, res) => {
+app.get('/api/check-email', async (req, res) => {
     const { email } = req.query;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -306,7 +306,7 @@ app.get('/check-email', async (req, res) => {
     }
 });
 
-app.post('/create-subscription', async (req, res) => {
+app.post('/api/create-subscription', async (req, res) => {
     try {
         const { priceId, email, delivery, addOnPriceIds, quantity = 1 } = req.body;
 
@@ -545,7 +545,7 @@ app.post('/create-subscription', async (req, res) => {
 
 // --- Webhook Handling ---
 
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     console.log('Webhook received!');
     const sig = req.headers['stripe-signature'];
     let event;
@@ -1998,7 +1998,7 @@ async function handleAddress(customerId, addressData, type, existingCustomer) {
 const processingLocks = new Map();
 
 // Endpoint: Capture Lead (Pre-payment)
-app.post('/capture-lead', async (req, res) => {
+app.post('/api/capture-lead', async (req, res) => {
     console.log('🚨🚨🚨 CAPTURE-LEAD ENDPOINT HIT! Email:', req.body.email);
 
     const { email } = req.body;
