@@ -65,7 +65,7 @@ app.get('/api/products', async (req, res) => {
 
             // Proxy Stripe file links through our endpoint to avoid CORS issues
             if (imageUrl && imageUrl.includes('files.stripe.com')) {
-                imageUrl = `${req.protocol}://${req.get('host')}/product-image?url=${encodeURIComponent(imageUrl)}`;
+                imageUrl = `${req.protocol}://${req.get('host')}/api/product-image?url=${encodeURIComponent(imageUrl)}`;
             }
 
             // Find matching plan in Sheet by Stripe Price ID (Plan ID in Sheet) OR by Name
