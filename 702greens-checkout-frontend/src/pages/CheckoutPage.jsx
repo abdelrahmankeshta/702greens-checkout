@@ -11,6 +11,10 @@ import { Button } from '../components/ui/Button';
 
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+
+if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
+    console.error("🚨 Missing VITE_STRIPE_PUBLISHABLE_KEY! Payment Element will not load.");
+}
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:4242' : '/api');
 
 const PRODUCT_MAPPING = {
