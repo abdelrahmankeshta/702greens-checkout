@@ -31,12 +31,12 @@ app.use((req, res, next) => {
 app.get('/products', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
-        // Whitelist of allowed Price IDs (TEST MODE)
+        // Whitelist of allowed Price IDs (LIVE MODE)
         const ALLOWED_PRICE_IDS = [
-            'price_1SX1mBCFLmsUiqyIOdil0j6S', // Single Nutrition Mix - One Off
-            'price_1SX1jsCFLmsUiqyIiCnJ0aoS', // Single Nutrition Mix - Bi-Weekly
-            'price_1SX1hOCFLmsUiqyIINhM5bQm', // Double Nutrition Mix
-            'price_1SX1evCFLmsUiqyIGK9H7eva', // Single Nutrition Mix
+            'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
+            'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
+            'price_1SX659CFLmsUiqyIl8cIM77T', // Double Nutrition Mix
+            'price_1SX655CFLmsUiqyIVMOAdbxd', // Single Nutrition Mix
         ];
 
         // Fetch recurring subscription products
@@ -57,13 +57,34 @@ app.get('/products', async (req, res) => {
         const allPrices = [...recurringPrices.data, ...oneTimePrices.data];
         const filteredPrices = allPrices.filter(price => ALLOWED_PRICE_IDS.includes(price.id));
 
+        // Fetch Plans from Sheet to get correct interval counts
+        const sheetPlans = await getPlans();
+
         const products = filteredPrices.map(price => {
             let imageUrl = price.product.images[0] || '';
 
             // Proxy Stripe file links through our endpoint to avoid CORS issues
             if (imageUrl && imageUrl.includes('files.stripe.com')) {
-                imageUrl = `http://localhost:${PORT}/product-image?url=${encodeURIComponent(imageUrl)}`;
+                imageUrl = `${req.protocol}://${req.get('host')}/product-image?url=${encodeURIComponent(imageUrl)}`;
             }
+
+            // Find matching plan in Sheet by Stripe Price ID (Plan ID in Sheet) OR by Name
+            let sheetPlan = sheetPlans.find(p => p.id === price.id);
+
+            if (!sheetPlan) {
+                // Fallback: Match by Name (case-insensitive)
+                const productName = (price.product.name || '').trim().toLowerCase();
+                sheetPlan = sheetPlans.find(p => (p.name || '').trim().toLowerCase() === productName);
+                if (sheetPlan) {
+                    // console.log(`[DEBUG] Matched plan by name: '${productName}' -> Interval: ${sheetPlan.intervalCount}`);
+                } else {
+                    // console.log(`[DEBUG] No plan match for: '${productName}' (ID: ${price.id})`);
+                }
+            } else {
+                // console.log(`[DEBUG] Matched plan by ID: ${price.id} -> Interval: ${sheetPlan.intervalCount}`);
+            }
+
+            const intervalCount = sheetPlan ? sheetPlan.intervalCount : (price.recurring ? price.recurring.interval_count : 1);
 
             return {
                 id: price.id,
@@ -74,6 +95,7 @@ app.get('/products', async (req, res) => {
                 currency: price.currency,
                 image: imageUrl,
                 interval: price.recurring ? price.recurring.interval : 'one_time',
+                interval_count: intervalCount,
                 type: price.type
             };
         });
@@ -105,8 +127,10 @@ app.get('/product-image', async (req, res) => {
     }
 });
 
-// Root route removed - frontend will handle "/" on Vercel
-
+// 1) Health check
+app.get('/', (req, res) => {
+    res.send('702Greens Stripe subscription backend is running ✅');
+});
 
 // --- Date Helpers (Pacific Time) ---
 const addInterval = (timestamp, interval, count) => {
@@ -1424,23 +1448,32 @@ async function findSubscriptionByStripeId(stripeSubId) {
     }
 }
 
-
-// Export for Vercel serverless function
+// 3) Start server
+// Export the app for Vercel Serverless Functions
 module.exports = app;
-
 
 // --- Google Sheets Integration ---
 const { google } = require('googleapis');
 
 
 // Load credentials
-const KEY_FILE_PATH = path.join(__dirname, 'credentials.json');
 const SPREADSHEET_ID = '1ij_i-W-6cLBQnL_X3d9htwy0-rlRQWT4RcT8gq8FCo0';
 
-const auth = new google.auth.GoogleAuth({
-    keyFile: KEY_FILE_PATH,
+let authConfig = {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+};
+
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+        authConfig.credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    } catch (e) {
+        console.error('Error parsing GOOGLE_SERVICE_ACCOUNT_KEY:', e);
+    }
+} else {
+    authConfig.keyFile = path.join(__dirname, '..', 'credentials.json');
+}
+
+const auth = new google.auth.GoogleAuth(authConfig);
 
 const sheets = google.sheets({ version: 'v4', auth });
 
@@ -1966,6 +1999,8 @@ const processingLocks = new Map();
 
 // Endpoint: Capture Lead (Pre-payment)
 app.post('/capture-lead', async (req, res) => {
+    console.log('🚨🚨🚨 CAPTURE-LEAD ENDPOINT HIT! Email:', req.body.email);
+
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -2004,11 +2039,23 @@ app.post('/capture-lead', async (req, res) => {
         if (!existingCustomer) {
             isNewCustomer = true;
             customerId = await getNextId('Customers', 'CUS');
+            console.log('📝 NEW CUSTOMER - Generated ID:', customerId);
+
             const newCustomerRow = [
                 customerId, now, email, cleanPhone, cleanFirstName, cleanLastName, cleanFullName,
                 'TRUE', 'TRUE', '', '', 'Checkout Form', now, 'Lead captured at checkout'
             ];
-            await appendToSheet('Customers', newCustomerRow);
+
+            console.log('📝 Attempting to append customer row:', newCustomerRow);
+            console.log('📝 Row has', newCustomerRow.length, 'columns');
+
+            try {
+                await appendToSheet('Customers', newCustomerRow);
+                console.log('✅ Successfully appended customer to sheet!');
+            } catch (error) {
+                console.error('❌ FAILED to append customer:', error.message);
+                throw error;
+            }
 
             // For new customers, we need to find the row index we just added to link addresses
             // Since we just appended, it's the last row. But safer to fetch or calculate.
