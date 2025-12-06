@@ -33,10 +33,10 @@ app.get('/products', async (req, res) => {
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
         const ALLOWED_PRICE_IDS = [
-            'price_1SX1mBCFLmsUiqyIOdil0j6S', // Single Nutrition Mix - One Off
-            'price_1SX1jsCFLmsUiqyIiCnJ0aoS', // Single Nutrition Mix - Bi-Weekly
-            'price_1SX1hOCFLmsUiqyIINhM5bQm', // Double Nutrition Mix
-            'price_1SX1evCFLmsUiqyIGK9H7eva', // Single Nutrition Mix
+            'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
+            'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
+            'price_1SX659CFLmsUiqyIl8cIM77T', // Double Nutrition Mix
+            'price_1SX655CFLmsUiqyIVMOAdbxd', // Single Nutrition Mix
         ];
 
         // Fetch recurring subscription products

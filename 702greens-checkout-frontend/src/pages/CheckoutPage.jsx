@@ -19,10 +19,10 @@ if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
 const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:4242' : '/api');
 
 const PRODUCT_MAPPING = {
-    'single-one-time': 'price_1SX1mBCFLmsUiqyIOdil0j6S',
-    'single-bi-weekly': 'price_1SX1jsCFLmsUiqyIiCnJ0aoS',
-    'double-nutrition': 'price_1SX1hOCFLmsUiqyIINhM5bQm',
-    'single-nutrition': 'price_1SX1evCFLmsUiqyIGK9H7eva'
+    'single-one-time': 'price_1SX65ECFLmsUiqyI2JaMIb12',
+    'single-bi-weekly': 'price_1SX65BCFLmsUiqyIbFXwFSgi',
+    'double-nutrition': 'price_1SX659CFLmsUiqyIl8cIM77T',
+    'single-nutrition': 'price_1SX655CFLmsUiqyIVMOAdbxd'
 };
 
 export default function CheckoutPage() {
