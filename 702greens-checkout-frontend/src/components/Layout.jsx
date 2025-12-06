@@ -9,67 +9,31 @@ export default function Layout({ children }) {
     return (
         <div style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
+            {/* Header */}
             <header style={{
                 width: '100%',
-                backgroundColor: '#0f392b',
-                padding: '2.5rem 0', // Increased padding for taller header
+                backgroundColor: '#ffffff',
+                padding: '2rem 0',
                 textAlign: 'center',
-                position: 'relative',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
-                zIndex: 20, // Higher z-index to sit above content
-                overflow: 'visible' // Allow greens to overflow
+                borderBottom: '1px solid #e5e7eb',
+                // boxShadow: '0 1px 3px rgba(0,0,0,0.05)', // Optional subtle shadow
+                zIndex: 20,
             }}>
                 <Link to="/" style={{
                     textDecoration: 'none',
                     display: 'inline-block',
-                    position: 'relative',
-                    zIndex: 2
                 }}>
                     <img
-                        src="/702greens-logo.png"
-                        alt="702Greens Logo"
+                        src="/logo-full-color.png"
+                        alt="702Greens"
                         style={{
-                            height: '70px',
+                            height: '80px', // Adjusted height based on screenshot
                             width: 'auto',
                             display: 'block',
                             margin: '0 auto',
-                            filter: 'brightness(0) invert(1)',
-                            transition: 'opacity 0.2s ease'
                         }}
-                        onMouseEnter={(e) => e.target.style.opacity = '0.9'}
-                        onMouseLeave={(e) => e.target.style.opacity = '1'}
                     />
                 </Link>
-
-                {/* Overflowing Greens - Left */}
-                <div style={{
-                    position: 'absolute',
-                    bottom: '-40px', // Overflowing downwards
-                    left: '-50px',
-                    width: '400px',
-                    height: '120px',
-                    backgroundImage: 'url(/greens-horizontal.png)',
-                    backgroundSize: 'contain',
-                    backgroundRepeat: 'no-repeat',
-                    transform: 'rotate(5deg)',
-                    zIndex: 1,
-                    pointerEvents: 'none'
-                }} />
-
-                {/* Overflowing Greens - Right */}
-                <div style={{
-                    position: 'absolute',
-                    bottom: '-40px', // Overflowing downwards
-                    right: '-50px',
-                    width: '400px',
-                    height: '120px',
-                    backgroundImage: 'url(/greens-horizontal.png)',
-                    backgroundSize: 'contain',
-                    backgroundRepeat: 'no-repeat',
-                    transform: 'scaleX(-1) rotate(5deg)', // Mirror and rotate
-                    zIndex: 1,
-                    pointerEvents: 'none'
-                }} />
             </header>
 
             {/* Main Content */}

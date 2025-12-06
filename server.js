@@ -33,10 +33,10 @@ app.get('/products', async (req, res) => {
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
         const ALLOWED_PRICE_IDS = [
-            'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
-            'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
-            'price_1SX659CFLmsUiqyIl8cIM77T', // Double Nutrition Mix
-            'price_1SX655CFLmsUiqyIVMOAdbxd', // Single Nutrition Mix
+            'price_1SX1mBCFLmsUiqyIOdil0j6S', // Single Nutrition Mix - One Off
+            'price_1SX1jsCFLmsUiqyIiCnJ0aoS', // Single Nutrition Mix - Bi-Weekly
+            'price_1SX1hOCFLmsUiqyIINhM5bQm', // Double Nutrition Mix
+            'price_1SX1evCFLmsUiqyIGK9H7eva', // Single Nutrition Mix
         ];
 
         // Fetch recurring subscription products
@@ -313,18 +313,19 @@ app.post('/create-subscription', async (req, res) => {
         if (!priceId) {
             return res.status(400).json({ error: 'priceId is required' });
         }
-        if (!email) {
-            return res.status(400).json({ error: 'email is required' });
-        }
+        // Removed strict email check to support Express Checkout initialization on page load
 
         // Fetch the price to determine if it's one-time or recurring
         const price = await stripe.prices.retrieve(priceId);
         const isOneTime = price.type === 'one_time';
 
-        // 1) Create the customer with full details
-        const customerData = {
-            email,
-        };
+        // 1) Create the customer with full details or as guest
+        const customerData = {};
+        if (email) {
+            customerData.email = email;
+        } else {
+            customerData.description = 'Guest Customer (Initialized for Express Checkout)';
+        }
 
         if (delivery) {
             customerData.name = `${delivery.firstName} ${delivery.lastName}`.trim();

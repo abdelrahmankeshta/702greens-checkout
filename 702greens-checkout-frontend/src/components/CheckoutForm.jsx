@@ -234,7 +234,7 @@ export default function CheckoutForm({ billingAddress, setBillingAddress, sameAs
                 type="submit"
                 disabled={!stripe || isProcessing}
                 className="btn-place-order"
-                style={{ marginTop: '1.5rem', width: '100%', padding: '1rem' }}
+                style={{ marginTop: '1.5rem', width: '100%', height: '48px', fontWeight: 600, fontSize: '1rem', borderRadius: 'var(--radius-md)' }}
             >
                 {isProcessing ? 'Processing...' : 'Place Order'}
             </Button>

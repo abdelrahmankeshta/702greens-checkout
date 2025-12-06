@@ -91,5 +91,25 @@ button {
 }
 
 .btn-place-order:hover {
-    background-color: #22c55e !important;
+    background-color: #164e3b !important;
+}
+
+/* Discount Apply Button */
+.btn-apply-discount {
+    background-color: #e5e7eb !important;
+    color: #9ca3af !important;
+    transition: all 0.2s ease-in-out !important;
+    cursor: default !important;
+    border: none !important;
+}
+
+.btn-apply-discount.active {
+    background-color: var(--color-primary) !important;
+    color: white !important;
+    cursor: pointer !important;
+}
+
+.btn-apply-discount.active:hover {
+    background-color: #164e3b !important;
+    /* Slightly darker/different hue for hover */
 }
