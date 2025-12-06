@@ -313,18 +313,23 @@ app.post('/api/create-subscription', async (req, res) => {
         if (!priceId) {
             return res.status(400).json({ error: 'priceId is required' });
         }
-        if (!email) {
-            return res.status(400).json({ error: 'email is required' });
+        if (!priceId) {
+            return res.status(400).json({ error: 'priceId is required' });
         }
+        // Email check removed to support Express Checkout initialization
 
         // Fetch the price to determine if it's one-time or recurring
         const price = await stripe.prices.retrieve(priceId);
         const isOneTime = price.type === 'one_time';
 
         // 1) Create the customer with full details
-        const customerData = {
-            email,
-        };
+        // 1) Create the customer with full details or as guest
+        const customerData = {};
+        if (email) {
+            customerData.email = email;
+        } else {
+            customerData.description = 'Guest Customer (Initialized for Express Checkout)';
+        }
 
         if (delivery) {
             customerData.name = `${delivery.firstName} ${delivery.lastName}`.trim();
