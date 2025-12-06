@@ -999,12 +999,9 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                        {!clientSecret ? (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-                                <Loader2 size={40} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
-                            </div>
-                        ) : (
-                            <Elements key={clientSecret} stripe={stripePromise} options={{
+                        {/* Express Checkout */}
+                        {clientSecret ? (
+                            <Elements key={`express-${clientSecret}`} stripe={stripePromise} options={{
                                 clientSecret,
                                 appearance: {
                                     theme: 'stripe',
@@ -1017,309 +1014,322 @@ export default function CheckoutPage() {
                                 },
                                 paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
                             }}>
-                                {/* Wrapped Content Starts Here */}
-                                {/* Express Checkout */}
-                                {clientSecret && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
+                                        Express checkout
+                                    </div>
                                     <div style={{ marginBottom: '1.5rem' }}>
-                                        <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
-                                            Express checkout
-                                        </div>
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <ExpressCheckoutElement options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }} />
-                                        </div>
-                                        <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
-                                            By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                            <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
-                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                        </div>
+                                        <ExpressCheckoutElement options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }} />
                                     </div>
-                                )}
-
-                                {/* Contact Section */}
-                                <section style={{ marginBottom: '2.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Contact</h2>
-                                        <Link to="/login" state={{ from: location }} style={{ fontSize: '0.875rem', color: 'var(--color-primary)', textDecoration: 'underline' }}>Log in</Link>
+                                    <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
+                                        By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
                                     </div>
-
-                                    <Input
-                                        placeholder="Email"
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        onBlur={() => handleBlur('email', email, 'email')}
-                                        error={errors.email}
-                                    />
-                                </section>
-
-                                {/* Delivery Section */}
-                                <section style={{ marginBottom: '2.5rem' }}>
-                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Delivery</h2>
-
-                                    <Select
-                                        label="Country/Region"
-                                        options={[{ value: 'US', label: 'United States' }]}
-                                        value={delivery.country}
-                                        onChange={(e) => setDelivery({ ...delivery, country: e.target.value })}
-                                    />
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <Input
-                                            placeholder="First name"
-                                            value={delivery.firstName}
-                                            onChange={(e) => setDelivery({ ...delivery, firstName: e.target.value })}
-                                            onBlur={() => handleBlur('firstName', delivery.firstName, 'first name')}
-                                            error={errors.firstName}
-                                        />
-                                        <Input
-                                            placeholder="Last name"
-                                            value={delivery.lastName}
-                                            onChange={(e) => setDelivery({ ...delivery, lastName: e.target.value })}
-                                            onBlur={() => handleBlur('lastName', delivery.lastName, 'last name')}
-                                            error={errors.lastName}
-                                        />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+                                        <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
+                                        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
                                     </div>
-
-                                    <Input
-                                        placeholder="Company (optional)"
-                                        value={delivery.company}
-                                        onChange={(e) => setDelivery({ ...delivery, company: e.target.value })}
-                                        onBlur={() => triggerCapture()}
-                                    />
-
-                                    <Input
-                                        ref={addressInputRef}
-                                        placeholder="Address"
-                                        value={delivery.address}
-                                        onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
-                                        onBlur={() => handleBlur('address', delivery.address, 'address')}
-                                        error={errors.address}
-                                        rightIcon={<Search size={18} />}
-                                    />
-
-                                    <Input
-                                        placeholder="Apartment, suite, etc. (optional)"
-                                        value={delivery.apartment}
-                                        onChange={(e) => setDelivery({ ...delivery, apartment: e.target.value })}
-                                        onBlur={() => triggerCapture()}
-                                    />
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                                        <Input
-                                            placeholder="City"
-                                            value={delivery.city}
-                                            onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}
-                                            onBlur={() => handleBlur('city', delivery.city, 'city')}
-                                            error={errors.city}
-                                        />
-                                        <Select
-                                            options={[
-                                                { value: '', label: 'State' },
-                                                { value: 'AL', label: 'Alabama' },
-                                                { value: 'AK', label: 'Alaska' },
-                                                { value: 'AZ', label: 'Arizona' },
-                                                { value: 'AR', label: 'Arkansas' },
-                                                { value: 'CA', label: 'California' },
-                                                { value: 'CO', label: 'Colorado' },
-                                                { value: 'CT', label: 'Connecticut' },
-                                                { value: 'DE', label: 'Delaware' },
-                                                { value: 'DC', label: 'District Of Columbia' },
-                                                { value: 'FL', label: 'Florida' },
-                                                { value: 'GA', label: 'Georgia' },
-                                                { value: 'HI', label: 'Hawaii' },
-                                                { value: 'ID', label: 'Idaho' },
-                                                { value: 'IL', label: 'Illinois' },
-                                                { value: 'IN', label: 'Indiana' },
-                                                { value: 'IA', label: 'Iowa' },
-                                                { value: 'KS', label: 'Kansas' },
-                                                { value: 'KY', label: 'Kentucky' },
-                                                { value: 'LA', label: 'Louisiana' },
-                                                { value: 'ME', label: 'Maine' },
-                                                { value: 'MD', label: 'Maryland' },
-                                                { value: 'MA', label: 'Massachusetts' },
-                                                { value: 'MI', label: 'Michigan' },
-                                                { value: 'MN', label: 'Minnesota' },
-                                                { value: 'MS', label: 'Mississippi' },
-                                                { value: 'MO', label: 'Missouri' },
-                                                { value: 'MT', label: 'Montana' },
-                                                { value: 'NE', label: 'Nebraska' },
-                                                { value: 'NV', label: 'Nevada' },
-                                                { value: 'NH', label: 'New Hampshire' },
-                                                { value: 'NJ', label: 'New Jersey' },
-                                                { value: 'NM', label: 'New Mexico' },
-                                                { value: 'NY', label: 'New York' },
-                                                { value: 'NC', label: 'North Carolina' },
-                                                { value: 'ND', label: 'North Dakota' },
-                                                { value: 'OH', label: 'Ohio' },
-                                                { value: 'OK', label: 'Oklahoma' },
-                                                { value: 'OR', label: 'Oregon' },
-                                                { value: 'PA', label: 'Pennsylvania' },
-                                                { value: 'RI', label: 'Rhode Island' },
-                                                { value: 'SC', label: 'South Carolina' },
-                                                { value: 'SD', label: 'South Dakota' },
-                                                { value: 'TN', label: 'Tennessee' },
-                                                { value: 'TX', label: 'Texas' },
-                                                { value: 'UT', label: 'Utah' },
-                                                { value: 'VT', label: 'Vermont' },
-                                                { value: 'VA', label: 'Virginia' },
-                                                { value: 'WA', label: 'Washington' },
-                                                { value: 'WV', label: 'West Virginia' },
-                                                { value: 'WI', label: 'Wisconsin' },
-                                                { value: 'WY', label: 'Wyoming' }
-                                            ]}
-                                            value={delivery.state}
-                                            onChange={(e) => {
-                                                const newState = e.target.value;
-                                                setDelivery({ ...delivery, state: newState });
-                                                triggerCapture({ state: newState });
-                                            }}
-                                        />
-                                        <Input
-                                            placeholder="ZIP code"
-                                            value={delivery.zip}
-                                            onChange={(e) => setDelivery({ ...delivery, zip: e.target.value })}
-                                            onBlur={() => handleBlur('zip', delivery.zip, 'ZIP code')}
-                                            error={errors.zip}
-                                        />
-                                    </div>
-
-                                    <Input
-                                        placeholder="Phone"
-                                        type="tel"
-                                        value={delivery.phone}
-                                        onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })}
-                                        onBlur={() => handleBlur('phone', delivery.phone, 'phone')}
-                                        error={errors.phone}
-                                    />
-                                </section>
-
-                                {/* Shipping Method */}
-                                <section style={{ marginBottom: '2.5rem' }}>
-                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Shipping method</h2>
-
-                                    {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
-                                        <div style={{
-                                            padding: '1.5rem',
-                                            backgroundColor: '#f9fafb',
-                                            borderRadius: 'var(--radius-md)',
-                                            color: '#6b7280',
-                                            textAlign: 'center',
-                                            fontSize: '0.95rem'
-                                        }}>
-                                            Enter your shipping address to view available shipping methods.
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {/* Shipping Logic: Show Subscription Shipping if ANY subscription product is present (Main or Add-on) */
-                                                (currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
-                                                    /* Subscription Layout (Free Shipping) */
-                                                    <>
-                                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>First shipment</h3>
-                                                        <div style={{
-                                                            padding: '1rem',
-                                                            backgroundColor: '#f0fdf4', // Light green background
-                                                            border: '1px solid #166534', // Dark green border
-                                                            borderRadius: 'var(--radius-md)',
-                                                            display: 'flex',
-                                                            justifyContent: 'space-between',
-                                                            alignItems: 'center',
-                                                            marginBottom: '1.5rem'
-                                                        }}>
-                                                            <div>
-                                                                <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
-                                                                <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'right' }}>
-                                                                <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
-                                                                <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
-                                                            </div>
-                                                        </div>
-
-                                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>Recurring shipments</h3>
-                                                        <div style={{
-                                                            padding: '1rem',
-                                                            backgroundColor: '#f9fafb',
-                                                            border: '1px solid #e5e7eb', // Light gray border
-                                                            borderRadius: 'var(--radius-md)',
-                                                            color: '#374151',
-                                                            fontSize: '0.95rem'
-                                                        }}>
-                                                            Local Delivery · Free shipping for the first 4 weeks, followed by $14.00 every 4 weeks
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    /* One-time Purchase Layout ($3.50 -> FREE) */
-                                                    <div style={{
-                                                        padding: '1rem',
-                                                        backgroundColor: '#f0fdf4',
-                                                        border: '1px solid #166534',
-                                                        borderRadius: 'var(--radius-md)',
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                    }}>
-                                                        <div>
-                                                            <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
-                                                            <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
-                                                        </div>
-                                                        <div style={{ textAlign: 'right' }}>
-                                                            <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
-                                                            <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                        </>
-                                    )}
-                                </section>
-
-                                {/* Payment Section */}
-                                <section style={{ marginBottom: '2.5rem' }}>
-                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Payment</h2>
-                                    <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                                        All transactions are secure and encrypted.
-                                    </p>
-
-                                    {clientSecret ? (
-                                        <div style={{
-                                            padding: '1.5rem',
-                                            border: '1px solid var(--color-border)',
-                                            borderRadius: 'var(--radius-md)',
-                                            backgroundColor: '#fff'
-                                        }}>
-                                            <CheckoutForm
-                                                billingAddress={billingAddress}
-                                                setBillingAddress={setBillingAddress}
-                                                sameAsShipping={sameAsShipping}
-                                                setSameAsShipping={setSameAsShipping}
-                                                onCapture={triggerCapture}
-                                                onValidate={validateForm}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div style={{
-                                            padding: '2rem',
-                                            textAlign: 'center',
-                                            background: '#f9fafb',
-                                            borderRadius: 'var(--radius-md)',
-                                            color: 'var(--color-text-muted)',
-                                            border: '1px dashed var(--color-border)'
-                                        }}>
-                                            {loading ? 'Initializing secure checkout...' : 'Please enter your email to load payment options.'}
-                                        </div>
-                                    )}
-
-                                    {error && (
-                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
-                                            {error}
-                                        </div>
-                                    )}
-                                </section>
-
-
+                                </div>
                             </Elements>
+                        ) : (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', marginBottom: '1.5rem' }}>
+                                <Loader2 size={30} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
+                            </div>
+                        )}
+
+                        {/* Contact Section */}
+                        <section style={{ marginBottom: '2.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Contact</h2>
+                                <Link to="/login" state={{ from: location }} style={{ fontSize: '0.875rem', color: 'var(--color-primary)', textDecoration: 'underline' }}>Log in</Link>
+                            </div>
+
+                            <Input
+                                placeholder="Email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                onBlur={() => handleBlur('email', email, 'email')}
+                                error={errors.email}
+                            />
+                        </section>
+
+                        {/* Delivery Section */}
+                        <section style={{ marginBottom: '2.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Delivery</h2>
+
+                            <Select
+                                label="Country/Region"
+                                options={[{ value: 'US', label: 'United States' }]}
+                                value={delivery.country}
+                                onChange={(e) => setDelivery({ ...delivery, country: e.target.value })}
+                            />
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <Input
+                                    placeholder="First name"
+                                    value={delivery.firstName}
+                                    onChange={(e) => setDelivery({ ...delivery, firstName: e.target.value })}
+                                    onBlur={() => handleBlur('firstName', delivery.firstName, 'first name')}
+                                    error={errors.firstName}
+                                />
+                                <Input
+                                    placeholder="Last name"
+                                    value={delivery.lastName}
+                                    onChange={(e) => setDelivery({ ...delivery, lastName: e.target.value })}
+                                    onBlur={() => handleBlur('lastName', delivery.lastName, 'last name')}
+                                    error={errors.lastName}
+                                />
+                            </div>
+
+                            <Input
+                                placeholder="Company (optional)"
+                                value={delivery.company}
+                                onChange={(e) => setDelivery({ ...delivery, company: e.target.value })}
+                                onBlur={() => triggerCapture()}
+                            />
+
+                            <Input
+                                ref={addressInputRef}
+                                placeholder="Address"
+                                value={delivery.address}
+                                onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
+                                onBlur={() => handleBlur('address', delivery.address, 'address')}
+                                error={errors.address}
+                                rightIcon={<Search size={18} />}
+                            />
+
+                            <Input
+                                placeholder="Apartment, suite, etc. (optional)"
+                                value={delivery.apartment}
+                                onChange={(e) => setDelivery({ ...delivery, apartment: e.target.value })}
+                                onBlur={() => triggerCapture()}
+                            />
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                                <Input
+                                    placeholder="City"
+                                    value={delivery.city}
+                                    onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}
+                                    onBlur={() => handleBlur('city', delivery.city, 'city')}
+                                    error={errors.city}
+                                />
+                                <Select
+                                    options={[
+                                        { value: '', label: 'State' },
+                                        { value: 'AL', label: 'Alabama' },
+                                        { value: 'AK', label: 'Alaska' },
+                                        { value: 'AZ', label: 'Arizona' },
+                                        { value: 'AR', label: 'Arkansas' },
+                                        { value: 'CA', label: 'California' },
+                                        { value: 'CO', label: 'Colorado' },
+                                        { value: 'CT', label: 'Connecticut' },
+                                        { value: 'DE', label: 'Delaware' },
+                                        { value: 'DC', label: 'District Of Columbia' },
+                                        { value: 'FL', label: 'Florida' },
+                                        { value: 'GA', label: 'Georgia' },
+                                        { value: 'HI', label: 'Hawaii' },
+                                        { value: 'ID', label: 'Idaho' },
+                                        { value: 'IL', label: 'Illinois' },
+                                        { value: 'IN', label: 'Indiana' },
+                                        { value: 'IA', label: 'Iowa' },
+                                        { value: 'KS', label: 'Kansas' },
+                                        { value: 'KY', label: 'Kentucky' },
+                                        { value: 'LA', label: 'Louisiana' },
+                                        { value: 'ME', label: 'Maine' },
+                                        { value: 'MD', label: 'Maryland' },
+                                        { value: 'MA', label: 'Massachusetts' },
+                                        { value: 'MI', label: 'Michigan' },
+                                        { value: 'MN', label: 'Minnesota' },
+                                        { value: 'MS', label: 'Mississippi' },
+                                        { value: 'MO', label: 'Missouri' },
+                                        { value: 'MT', label: 'Montana' },
+                                        { value: 'NE', label: 'Nebraska' },
+                                        { value: 'NV', label: 'Nevada' },
+                                        { value: 'NH', label: 'New Hampshire' },
+                                        { value: 'NJ', label: 'New Jersey' },
+                                        { value: 'NM', label: 'New Mexico' },
+                                        { value: 'NY', label: 'New York' },
+                                        { value: 'NC', label: 'North Carolina' },
+                                        { value: 'ND', label: 'North Dakota' },
+                                        { value: 'OH', label: 'Ohio' },
+                                        { value: 'OK', label: 'Oklahoma' },
+                                        { value: 'OR', label: 'Oregon' },
+                                        { value: 'PA', label: 'Pennsylvania' },
+                                        { value: 'RI', label: 'Rhode Island' },
+                                        { value: 'SC', label: 'South Carolina' },
+                                        { value: 'SD', label: 'South Dakota' },
+                                        { value: 'TN', label: 'Tennessee' },
+                                        { value: 'TX', label: 'Texas' },
+                                        { value: 'UT', label: 'Utah' },
+                                        { value: 'VT', label: 'Vermont' },
+                                        { value: 'VA', label: 'Virginia' },
+                                        { value: 'WA', label: 'Washington' },
+                                        { value: 'WV', label: 'West Virginia' },
+                                        { value: 'WI', label: 'Wisconsin' },
+                                        { value: 'WY', label: 'Wyoming' }
+                                    ]}
+                                    value={delivery.state}
+                                    onChange={(e) => {
+                                        const newState = e.target.value;
+                                        setDelivery({ ...delivery, state: newState });
+                                        triggerCapture({ state: newState });
+                                    }}
+                                />
+                                <Input
+                                    placeholder="ZIP code"
+                                    value={delivery.zip}
+                                    onChange={(e) => setDelivery({ ...delivery, zip: e.target.value })}
+                                    onBlur={() => handleBlur('zip', delivery.zip, 'ZIP code')}
+                                    error={errors.zip}
+                                />
+                            </div>
+
+                            <Input
+                                placeholder="Phone"
+                                type="tel"
+                                value={delivery.phone}
+                                onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })}
+                                onBlur={() => handleBlur('phone', delivery.phone, 'phone')}
+                                error={errors.phone}
+                            />
+                        </section>
+
+                        {/* Shipping Method */}
+                        <section style={{ marginBottom: '2.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Shipping method</h2>
+
+                            {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
+                                <div style={{
+                                    padding: '1.5rem',
+                                    backgroundColor: '#f9fafb',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: '#6b7280',
+                                    textAlign: 'center',
+                                    fontSize: '0.95rem'
+                                }}>
+                                    Enter your shipping address to view available shipping methods.
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Shipping Logic: Show Subscription Shipping if ANY subscription product is present (Main or Add-on) */}
+                                    {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
+                                        /* Subscription Layout (Free Shipping) */
+                                        <>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>First shipment</h3>
+                                            <div style={{
+                                                padding: '1rem',
+                                                backgroundColor: '#f0fdf4', // Light green background
+                                                border: '1px solid #166534', // Dark green border
+                                                borderRadius: 'var(--radius-md)',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                marginBottom: '1.5rem'
+                                            }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
+                                                    <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
+                                                    <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
+                                                </div>
+                                            </div>
+
+                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>Recurring shipments</h3>
+                                            <div style={{
+                                                padding: '1rem',
+                                                backgroundColor: '#f9fafb',
+                                                border: '1px solid #e5e7eb', // Light gray border
+                                                borderRadius: 'var(--radius-md)',
+                                                color: '#374151',
+                                                fontSize: '0.95rem'
+                                            }}>
+                                                Local Delivery · Free shipping for the first 4 weeks, followed by $14.00 every 4 weeks
+                                            </div>
+                                        </>
+                                    ) : (
+                                        /* One-time Purchase Layout ($3.50 -> FREE) */
+                                        <div style={{
+                                            padding: '1rem',
+                                            backgroundColor: '#f0fdf4',
+                                            border: '1px solid #166534',
+                                            borderRadius: 'var(--radius-md)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
+                                                <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
+                                                <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </section>
+
+                        {/* Payment Section */}
+                        <section style={{ marginBottom: '2.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Payment</h2>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+                                All transactions are secure and encrypted.
+                            </p>
+
+                            {clientSecret ? (
+                                <div style={{
+                                    padding: '1.5rem',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 'var(--radius-md)',
+                                    backgroundColor: '#fff'
+                                }}>
+                                    <Elements key={`payment-${clientSecret}`} stripe={stripePromise} options={{
+                                        clientSecret,
+                                        appearance: {
+                                            theme: 'stripe',
+                                            variables: {
+                                                colorPrimary: '#0f392b',
+                                                colorBackground: '#ffffff',
+                                                colorText: '#0f392b',
+                                                borderRadius: '10px',
+                                            }
+                                        },
+                                        paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
+                                    }}>
+                                        <CheckoutForm
+                                            billingAddress={billingAddress}
+                                            setBillingAddress={setBillingAddress}
+                                            sameAsShipping={sameAsShipping}
+                                            setSameAsShipping={setSameAsShipping}
+                                            onCapture={triggerCapture}
+                                            onValidate={validateForm}
+                                        />
+                                    </Elements>
+                                </div>
+                            ) : (
+                                <div style={{
+                                    padding: '2rem',
+                                    textAlign: 'center',
+                                    background: '#f9fafb',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--color-text-muted)',
+                                    border: '1px dashed var(--color-border)'
+                                }}>
+                                    {loading ? 'Initializing secure checkout...' : 'Please enter your email to load payment options.'}
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Global Initialization Error */}
+                        {error && !clientSecret && (
+                            <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
+                                Error loading checkout: {error}
+                            </div>
                         )}
                     </div>
 
