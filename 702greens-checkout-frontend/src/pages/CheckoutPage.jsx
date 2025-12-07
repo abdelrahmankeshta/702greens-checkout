@@ -205,6 +205,7 @@ export default function CheckoutPage() {
         try {
             setLoading(true);
             setError(null);
+            console.log('[DEBUG Frontend] Initializing checkout. Discount:', appliedDiscount, 'OneTimeQty:', oneTimeQuantity);
 
             const res = await fetch(`${API_URL}/create-subscription`, {
                 method: 'POST',
@@ -222,6 +223,7 @@ export default function CheckoutPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to initialize checkout');
 
+            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret);
             setClientSecret(data.clientSecret);
         } catch (err) {
             console.error(err);

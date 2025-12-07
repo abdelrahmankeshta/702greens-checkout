@@ -376,12 +376,15 @@ app.post('/create-subscription', async (req, res) => {
 
         // Apply Discount (if applicable and NOT pure one-time flow)
         if (discountDeduction > 0 && !(isOneTime && !hasAddOns)) {
+            console.log(`[DEBUG] Creating negative invoice item: -${discountDeduction}`);
             await stripe.invoiceItems.create({
                 customer: customer.id,
                 amount: -discountDeduction,
                 currency: 'usd',
                 description: `Discount (${discount.code})`
             });
+        } else {
+            console.log(`[DEBUG] Skipping invoice item. discountDeduction: ${discountDeduction}, isOneTime: ${isOneTime}, hasAddOns: ${hasAddOns}`);
         }
 
         if (isOneTime && hasAddOns) {
