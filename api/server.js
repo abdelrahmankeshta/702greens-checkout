@@ -309,19 +309,41 @@ app.get('/api/check-email', async (req, res) => {
 
 app.post('/api/create-subscription', async (req, res) => {
     try {
-        const { priceId, email, delivery, addOnPriceIds, quantity = 1 } = req.body;
+        const { priceId, email, delivery, addOnPriceIds, quantity = 1, discount } = req.body;
 
         if (!priceId) {
             return res.status(400).json({ error: 'priceId is required' });
         }
-        if (!priceId) {
-            return res.status(400).json({ error: 'priceId is required' });
-        }
-        // Email check removed to support Express Checkout initialization
 
         // Fetch the price to determine if it's one-time or recurring
         const price = await stripe.prices.retrieve(priceId);
         const isOneTime = price.type === 'one_time';
+
+        // Calculate Total Amount (for discount calculation)
+        let totalAmount = price.unit_amount * (isOneTime ? parseInt(quantity, 10) : 1);
+
+        // Fetch Add-ons if present to verify total
+        if (addOnPriceIds && addOnPriceIds.length > 0) {
+            const addOnPrices = await Promise.all(addOnPriceIds.map(id => stripe.prices.retrieve(id)));
+            totalAmount += addOnPrices.reduce((sum, p) => sum + p.unit_amount * (isOneTime ? 1 : parseInt(quantity, 10)), 0);
+            // Note: Logic above assumes quantity applies to add-ons if mixed? 
+            // Logic in Scenario 1/3 uses quantity for the one-time part.
+            // But Scenario 3 (Sub Main + One-time Add-on) applies quantity to Add-on.
+            // Scenario 1 (One-time Main + Sub Add-on) applies quantity to Main.
+            // Let's refine based on scenario logic below, but strictly for percentage calc, 
+            // approximating totalAmount is usually fine if we apply discount to the *invoice* (which naturally handles subtotal).
+            // BUT for PaymentIntent (Scenario 2), we MUST know exact amount.
+            // For Subscriptions, we add a negative Invoice Item, we MUST know exact amount if fixed/percent.
+        }
+
+        let discountDeduction = 0;
+        if (discount) {
+            if (discount.discountMethod === 'fixed') {
+                discountDeduction = discount.discountValue * 100;
+            } else if (discount.discountMethod === 'percent') {
+                discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+            }
+        }
 
         // 1) Create the customer with full details
         // 1) Create the customer with full details or as guest
@@ -359,6 +381,18 @@ app.post('/api/create-subscription', async (req, res) => {
 
         // Check if we have add-ons
         const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
+
+        // Apply Discount (if applicable and NOT pure one-time flow)
+        // For pure one-time flow (Scenario 2), we minimize the intent amount directly.
+        // For all others (involving Subscription), we use a negative Invoice Item.
+        if (discountDeduction > 0 && !(isOneTime && !hasAddOns)) {
+            await stripe.invoiceItems.create({
+                customer: customer.id,
+                amount: -discountDeduction,
+                currency: 'usd',
+                description: `Discount (${discount.code})`
+            });
+        }
 
         if (isOneTime && hasAddOns) {
             // Scenario 1: Main = One-time (with Quantity) + Add-ons = Subscription
@@ -419,14 +453,19 @@ app.post('/api/create-subscription', async (req, res) => {
         } else if (isOneTime) {
             // Scenario 2: Main = One-time (with Quantity) - No Add-ons
             console.log('Scenario 2: One-time Main');
+
+            const originalAmount = price.unit_amount * parseInt(quantity, 10);
+            const finalAmount = Math.max(50, originalAmount - discountDeduction); // Standard Stripe minimum is usually 50 cents
+
             paymentIntent = await stripe.paymentIntents.create({
-                amount: price.unit_amount * parseInt(quantity, 10), // Apply quantity
+                amount: finalAmount,
                 currency: price.currency,
                 customer: customer.id,
                 metadata: {
                     price_id: priceId,
                     product_id: price.product,
                     quantity: quantity.toString(),
+                    discount_code: discount ? discount.code : ''
                 },
                 automatic_payment_methods: { enabled: true },
             });

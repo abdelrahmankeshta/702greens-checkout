@@ -214,7 +214,8 @@ export default function CheckoutPage() {
                     email,
                     delivery,
                     addOnPriceIds: selectedAddOnId ? [selectedAddOnId] : [], // Send Array with single Add-on Price ID
-                    quantity: oneTimeQuantity // Send Quantity for One-time product
+                    quantity: oneTimeQuantity, // Send Quantity for One-time product
+                    discount: appliedDiscount // Send applied discount object
                 }),
             });
 
@@ -230,13 +231,19 @@ export default function CheckoutPage() {
         }
     };
 
-    // Trigger initialization when email is valid (simple check)
     // Trigger initialization on mount or when price changes
     useEffect(() => {
         if (selectedPriceId && !clientSecret) {
             initializeCheckout();
         }
     }, [selectedPriceId]);
+
+    // Re-initialize when discount is applied/removed
+    useEffect(() => {
+        if (selectedPriceId) {
+            initializeCheckout();
+        }
+    }, [appliedDiscount, oneTimeQuantity]); // Re-init on discount or quantity change
 
     // Re-initialize if critical params change (optional, but careful not to loop)
     // For now, we only init once on mount/price selection to get the Intent.

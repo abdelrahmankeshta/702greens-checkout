@@ -309,7 +309,7 @@ app.get('/check-email', async (req, res) => {
 
 app.post('/create-subscription', async (req, res) => {
     try {
-        const { priceId, email, delivery, addOnPriceIds, quantity = 1 } = req.body;
+        const { priceId, email, delivery, addOnPriceIds, quantity = 1, discount } = req.body;
 
         if (!priceId) {
             return res.status(400).json({ error: 'priceId is required' });
@@ -319,6 +319,24 @@ app.post('/create-subscription', async (req, res) => {
         // Fetch the price to determine if it's one-time or recurring
         const price = await stripe.prices.retrieve(priceId);
         const isOneTime = price.type === 'one_time';
+
+        // Calculate Total Amount (for discount calculation)
+        let totalAmount = price.unit_amount * (isOneTime ? parseInt(quantity, 10) : 1);
+
+        // Fetch Add-ons if present to verify total
+        if (addOnPriceIds && addOnPriceIds.length > 0) {
+            const addOnPrices = await Promise.all(addOnPriceIds.map(id => stripe.prices.retrieve(id)));
+            totalAmount += addOnPrices.reduce((sum, p) => sum + p.unit_amount * (isOneTime ? 1 : parseInt(quantity, 10)), 0);
+        }
+
+        let discountDeduction = 0;
+        if (discount) {
+            if (discount.discountMethod === 'fixed') {
+                discountDeduction = discount.discountValue * 100;
+            } else if (discount.discountMethod === 'percent') {
+                discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+            }
+        }
 
         // 1) Create the customer with full details or as guest
         const customerData = {};
@@ -355,6 +373,16 @@ app.post('/create-subscription', async (req, res) => {
 
         // Check if we have add-ons
         const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
+
+        // Apply Discount (if applicable and NOT pure one-time flow)
+        if (discountDeduction > 0 && !(isOneTime && !hasAddOns)) {
+            await stripe.invoiceItems.create({
+                customer: customer.id,
+                amount: -discountDeduction,
+                currency: 'usd',
+                description: `Discount (${discount.code})`
+            });
+        }
 
         if (isOneTime && hasAddOns) {
             // Scenario 1: Main = One-time (with Quantity) + Add-ons = Subscription
@@ -415,14 +443,19 @@ app.post('/create-subscription', async (req, res) => {
         } else if (isOneTime) {
             // Scenario 2: Main = One-time (with Quantity) - No Add-ons
             console.log('Scenario 2: One-time Main');
+
+            const originalAmount = price.unit_amount * parseInt(quantity, 10);
+            const finalAmount = Math.max(50, originalAmount - discountDeduction);
+
             paymentIntent = await stripe.paymentIntents.create({
-                amount: price.unit_amount * parseInt(quantity, 10), // Apply quantity
+                amount: finalAmount,
                 currency: price.currency,
                 customer: customer.id,
                 metadata: {
                     price_id: priceId,
                     product_id: price.product,
                     quantity: quantity.toString(),
+                    discount_code: discount ? discount.code : ''
                 },
                 automatic_payment_methods: { enabled: true },
             });
