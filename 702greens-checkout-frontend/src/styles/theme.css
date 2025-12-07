@@ -113,3 +113,23 @@ button {
     background-color: #164e3b !important;
     /* Slightly darker/different hue for hover */
 }
+
+/* Responsive Header */
+.layout-header {
+    width: 100%;
+    background-color: #ffffff;
+    /* Padding handles by inner container now */
+    padding: 1.25rem 0;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    /* Keeps 100% width flow */
+    justify-content: center;
+    /* Centers the inner container */
+    z-index: 20;
+}
+
+@media (max-width: 960px) {
+    .layout-header {
+        padding: 1rem 0;
+    }
+}

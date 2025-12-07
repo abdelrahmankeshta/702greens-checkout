@@ -32,6 +32,7 @@ app.get('/api/products', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
+        // Whitelist of allowed Price IDs (TESTING MODE)
         const ALLOWED_PRICE_IDS = [
             'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
             'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
@@ -1153,6 +1154,11 @@ async function handlePaymentEvent(event) {
                 }
             }
 
+            // Log to Spoke Delivery Routes (After deliveries are created)
+            if (shippingAddressId && lineItems.length > 0) {
+                await logToSpokeSheet(customerId, shippingAddressId, lineItems, `Order: ${orderId}`);
+            }
+
 
 
         } catch (err) {
@@ -1546,6 +1552,42 @@ async function findCustomerByEmail(email) {
     }
 }
 
+// Helper: Find Customer by ID
+async function findCustomerById(customerId) {
+    try {
+        const res = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Customers!A:A', // ID is in Column A
+        });
+        const ids = res.data.values;
+        if (!ids) return null;
+
+        const rowIndex = ids.findIndex(row => row[0] === customerId);
+        if (rowIndex === -1) return null;
+
+        // Fetch Row (A:G) -> ID, Created, Email, Phone, First, Last, FullName
+        const rowRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `Customers!A${rowIndex + 1}:G${rowIndex + 1}`,
+        });
+        const row = rowRes.data.values[0];
+        if (!row) return null;
+
+        return {
+            id: row[0],
+            email: row[2],
+            phone: row[3],
+            firstName: row[4],
+            lastName: row[5],
+            fullName: row[6],
+            rowIndex: rowIndex + 1
+        };
+    } catch (error) {
+        console.error('Error finding customer by ID:', error);
+        return null;
+    }
+}
+
 // Helper: Find Address by ID
 async function findAddressById(addressId) {
     try {
@@ -1560,11 +1602,10 @@ async function findAddressById(addressId) {
         if (rowIndex === -1) return null;
 
         // Fetch Row (1-based index)
-        // Headers: Address_ID, Customer_ID, Type, First, Last, Company, Phone, Country, State, City, Zip, Line1, Line2
-        // A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9, K=10, L=11, M=12
+        // A=0, B=1 ... K=10(Zip), L=11(Zone), M=12(Line1), N=13(Line2)
         const rowRes = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Addresses!A${rowIndex + 1}:M${rowIndex + 1}`,
+            range: `Addresses!A${rowIndex + 1}:P${rowIndex + 1}`,
         });
 
         const row = rowRes.data.values[0];
@@ -1575,8 +1616,9 @@ async function findAddressById(addressId) {
             state: row[8] || '',
             city: row[9] || '',
             zip: row[10] || '',
-            line1: row[11] || '',
-            line2: row[12] || ''
+            zone: row[11] || '',
+            line1: row[12] || '',
+            line2: row[13] || ''
         };
 
     } catch (error) {
@@ -1686,6 +1728,45 @@ async function getDiscountCodes() {
     } catch (error) {
         console.error('Error fetching discount codes:', error);
         return [];
+    }
+}
+
+// --- Zip Zone Lookup Helper ---
+let zipZonesCache = null;
+let lastZipZonesFetch = 0;
+const ZIP_ZONES_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+async function getZipZones() {
+    const now = Date.now();
+    if (zipZonesCache && (now - lastZipZonesFetch < ZIP_ZONES_CACHE_TTL)) {
+        return zipZonesCache;
+    }
+
+    try {
+        const res = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'Zip Code Zoning!A:D', // Zip (A), Zone (B), Day_Letter (C), Day (D)
+        });
+        const rows = res.data.values;
+        if (!rows || rows.length < 2) return new Map();
+
+        const zoneMap = new Map();
+        rows.slice(1).forEach(row => {
+            if (row[0]) {
+                zoneMap.set(row[0].toString().trim(), {
+                    zone: row[1] || '',
+                    dayLetter: row[2] || '',
+                    day: row[3] || ''
+                });
+            }
+        });
+
+        zipZonesCache = zoneMap;
+        lastZipZonesFetch = now;
+        return zoneMap;
+    } catch (error) {
+        console.error('Error fetching zip zones:', error);
+        return new Map();
     }
 }
 
@@ -1844,6 +1925,21 @@ async function createDeliveries(orderData) {
 
         const now = formatIsoDate(Date.now() / 1000);
 
+        // Fetch Address to get Zip for Zoning
+        let zone = '';
+        let dayLetter = '';
+        let day = '';
+        if (shippingAddressId) {
+            const address = await findAddressById(shippingAddressId);
+            if (address && address.zip) {
+                const zipZones = await getZipZones();
+                const zoningInfo = zipZones.get(address.zip.toString().trim()) || {};
+                zone = zoningInfo.zone || '';
+                dayLetter = zoningInfo.dayLetter || '';
+                day = zoningInfo.day || '';
+            }
+        }
+
         for (let i = 0; i < numberOfDeliveries; i++) {
             const deliveryId = await getNextId('Deliveries', 'DEL');
             const deliveryNumber = i + 1;
@@ -1863,9 +1959,9 @@ async function createDeliveries(orderData) {
                 '', // Change_Reason
                 '', // Replaced_By_Delivery_ID
                 shippingAddressId || '', // Shipping_Address_ID
-                '', // Delivery_Window
-                '', // Carrier
-                '', // Tracking_Number
+                zone, // Zone (formerly Delivery_Window)
+                dayLetter, // Day_Letter (formerly Carrier)
+                day, // Day (formerly Tracking_Number)
                 orderId || '', // Order_ID
                 '', // Internal_Notes
                 now, // Created_At
@@ -1955,10 +2051,16 @@ async function handleAddress(customerId, addressData, type, existingCustomer) {
     if (!existingAddress) {
         // Create New
         addressId = await getNextId('Addresses', 'ADDR');
+        // Lookup Zone and Destructure
+        const zipZones = await getZipZones();
+        const zoningInfo = zipZones.get(zip || '') || {};
+        const zone = zoningInfo.zone || '';
+
         const newRow = [
             addressId, customerId, type,
             cleanFirstName, cleanLastName, cleanCompany, cleanPhone,
             cleanCountry, cleanState, cleanCity, zip || '',
+            zone, // Zone (Col L)
             cleanAddress1, cleanAddress2,
             now, now
         ];
@@ -1986,17 +2088,84 @@ async function handleAddress(customerId, addressData, type, existingCustomer) {
         // Update Existing
         addressId = existingAddress.id;
         const rowIndex = existingAddress.rowIndex;
+        // Lookup Zone for update as well
+        const zipZones = await getZipZones();
+        const zoningInfo = zipZones.get(zip || '') || {};
+        const zone = zoningInfo.zone || '';
+
         const updateValues = [
             cleanFirstName, cleanLastName, cleanCompany, cleanPhone,
             cleanCountry, cleanState, cleanCity, zip || '',
+            zone,
             cleanAddress1, cleanAddress2
         ];
-        // Update D through M
-        await updateSheetCells('Addresses', `D${rowIndex}:M${rowIndex}`, updateValues);
-        // Update Updated_At (O)
-        await updateSheetCells('Addresses', `O${rowIndex}`, [now]);
+        // Update D through N (shifted range, was D:M)
+        await updateSheetCells('Addresses', `D${rowIndex}:N${rowIndex}`, updateValues);
+        // Update Updated_At (P) (Shifted from O)
+        await updateSheetCells('Addresses', `P${rowIndex}`, [now]);
     }
     return addressId;
+}
+
+// Helper: Log to Spoke Delivery Routes Sheet
+async function logToSpokeSheet(customerId, shippingAddressId, lineItems, internalNotes = '') {
+    try {
+        console.log(`[logToSpokeSheet] Logging for Customer ${customerId}, Address ${shippingAddressId}`);
+
+        // 1. Fetch Customer Details
+        const customer = await findCustomerById(customerId);
+        if (!customer) {
+            console.error(`[logToSpokeSheet] Customer ${customerId} not found.`);
+            return;
+        }
+
+        // 2. Fetch Address Details
+        const address = await findAddressById(shippingAddressId);
+        if (!address) {
+            console.error(`[logToSpokeSheet] Address ${shippingAddressId} not found.`);
+            return;
+        }
+
+        // 3. Lookup Zoning
+        // We need Zip to get Zone/Day
+        let zone = '';
+        let day = '';
+        if (address.zip) {
+            const zipZones = await getZipZones();
+            const zoningInfo = zipZones.get(address.zip.toString().trim()) || {};
+            zone = zoningInfo.zone || '';
+            day = zoningInfo.day || '';
+        }
+
+        // 4. Format Products
+        const productsStr = lineItems.map(item => {
+            return `${item.quantity}x ${item.name}`;
+        }).join(', ');
+
+        // 5. Build Row
+        // Header: Address_Name, Full_Name, Address_Line_1, Address_Line_2, City, State, Country, Zip_Code, Zone, Day, Phone, Products, Notes
+        const row = [
+            customerId, // Address_Name (requested by user to be Customer_ID)
+            customer.fullName || `${customer.firstName} ${customer.lastName}`, // Full_Name
+            address.line1, // Address_Line_1
+            address.line2, // Address_Line_2
+            address.city, // City
+            address.state, // State
+            address.country, // Country
+            address.zip, // Zip_Code
+            zone, // Zone
+            day, // Day
+            customer.phone, // Phone
+            productsStr, // Products
+            internalNotes // Notes
+        ];
+
+        await appendToSheet('Spoke Delivery Routes (for CSV)', row);
+        console.log(`[logToSpokeSheet] Successfully logged to Spoke sheet.`);
+
+    } catch (error) {
+        console.error('[logToSpokeSheet] Error:', error);
+    }
 }
 
 // In-memory lock for processing emails to prevent race conditions

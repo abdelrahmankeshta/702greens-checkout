@@ -1,4 +1,8 @@
-export function Select({ label, options, error, ...props }) {
+import { useState } from 'react';
+
+export function Select({ label, options, error, onFocus, onBlur, ...props }) {
+    const [isFocused, setIsFocused] = useState(false);
+
     return (
         <div style={{ marginBottom: '1rem' }}>
             {label && (
@@ -19,15 +23,23 @@ export function Select({ label, options, error, ...props }) {
                         padding: '0.75rem',
                         paddingRight: '2.5rem',
                         borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--color-border)',
+                        border: `1px solid ${error ? '#ef4444' : isFocused ? '#0f392b' : '#e5e7eb'}`, // State-based border
                         fontSize: '1rem',
                         outline: 'none',
                         appearance: 'none',
                         backgroundColor: 'var(--color-bg-input)',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        transition: 'border-color 0.2s, box-shadow 0.2s',
+                        boxShadow: error ? 'none' : isFocused ? '0 0 0 1px #0f392b' : 'none' // State-based shadow
                     }}
-                    onFocus={(e) => e.target.style.borderColor = 'var(--color-border-focus)'}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--color-border)'}
+                    onFocus={(e) => {
+                        setIsFocused(true);
+                        if (onFocus) onFocus(e);
+                    }}
+                    onBlur={(e) => {
+                        setIsFocused(false);
+                        if (onBlur) onBlur(e);
+                    }}
                     {...props}
                 >
                     {options.map((opt) => (

@@ -479,32 +479,32 @@ export default function CheckoutPage() {
     const [errors, setErrors] = useState({});
 
     const handleBlur = (field, value, label) => {
-        // Clear error if value exists
+        // Lazy Validation: Only CLEAR errors on blur, never SET them.
+
+        // If value exists, check if we can clear the error
         if (value && value.trim() !== '') {
-            // Email Validation
+            // Email Validation (only clear if regex matches)
             if (field === 'email') {
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                 if (!emailRegex.test(value)) {
-                    setErrors(prev => ({
-                        ...prev,
-                        [field]: 'Enter a valid email'
-                    }));
-                    return; // Don't trigger capture if invalid
+                    // Do nothing (don't set error, but don't clear it if it exists? 
+                    // Actually better to just leave it. If they entered invalid email, 
+                    // and we don't show error, they think it's fine.
+                    // But user asked for "no red borders" on simple blur. 
+                    // Let's strictly rely on Submit for showing errors.
+                    triggerCapture();
+                    return;
                 }
             }
 
+            // Clear error if it exists
             setErrors(prev => {
                 const newErrors = { ...prev };
                 delete newErrors[field];
                 return newErrors;
             });
-        } else {
-            // Set error if empty and required (optional fields handled by not calling this or checking label)
-            setErrors(prev => ({
-                ...prev,
-                [field]: `Enter a ${label}`
-            }));
         }
+
         triggerCapture();
     };
 
@@ -708,91 +708,95 @@ export default function CheckoutPage() {
                 {/* Left Column: Form */}
                 <div className="checkout-left" style={{
                     flex: '1 1 550px', // Take up more space
-                    padding: '4rem 5% 4rem 10%', // Left padding larger to center content visually
+                    padding: '4rem 0 4rem 2rem', // Reduced padding, alignment via max-width
                     backgroundColor: '#ffffff',
+                    display: 'flex',
+                    justifyContent: 'flex-end', // Align content to the right (towards center)
                     borderRight: '1px solid #e5e7eb',
                     maxWidth: '100%'
                 }}>
-                    {/* Logo */}
-                    <div style={{ marginBottom: '2rem' }}>
-                        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary)' }}>702Greens</h1>
-                    </div>
+                    <div style={{
+                        width: '100%',
+                        maxWidth: '560px', // Squeezed max width
+                        paddingRight: '2rem', // Gutter
+                    }}>
 
-                    {/* Breadcrumbs */}
+
+                        {/* Breadcrumbs */}
 
 
-                    {/* Mobile Order Summary Toggle */}
-                    <div className="mobile-summary-toggle" style={{ marginBottom: '2rem', display: 'none' }}>
-                        <button
-                            onClick={() => setShowSummaryMobile(!showSummaryMobile)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '1rem', background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 8 }}
-                        >
-                            <ShoppingBag size={20} />
-                            <span style={{ flex: 1, textAlign: 'left' }}>{showSummaryMobile ? 'Hide' : 'Show'} order summary</span>
-                            <span style={{ fontWeight: 'bold' }}>${total.toFixed(2)}</span>
-                            {showSummaryMobile ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </button>
+                        {/* Mobile Order Summary Toggle */}
+                        <div className="mobile-summary-toggle" style={{ marginBottom: '2rem', display: 'none' }}>
+                            <button
+                                onClick={() => setShowSummaryMobile(!showSummaryMobile)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '1rem', background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                            >
+                                <ShoppingBag size={20} />
+                                <span style={{ flex: 1, textAlign: 'left' }}>{showSummaryMobile ? 'Hide' : 'Show'} order summary</span>
+                                <span style={{ fontWeight: 'bold' }}>${total.toFixed(2)}</span>
+                                {showSummaryMobile ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            </button>
 
-                        {/* Mobile Order Summary Content - Accordion Style */}
-                        {showSummaryMobile && (
-                            <div className="mobile-summary-content" style={{
-                                marginTop: '1rem',
-                                padding: '1.5rem',
-                                backgroundColor: '#fafafa',
-                                border: '1px solid #e5e7eb',
-                                borderRadius: 8,
-                                animation: 'slideDown 0.3s ease-out'
-                            }}>
-                                {productsLoading ? (
-                                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <p style={{ color: 'var(--color-text-muted)' }}>Loading products...</p>
-                                    </div>
-                                ) : productsError ? (
-                                    <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
-                                        Error loading products: {productsError}
-                                    </div>
-                                ) : !currentProduct ? (
-                                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <p style={{ color: 'var(--color-text-muted)' }}>No product selected</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* Product Display */}
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
-                                                <div style={{ position: 'relative' }}>
-                                                    <div style={{
-                                                        width: 60,
-                                                        height: 60,
-                                                        borderRadius: 'var(--radius-md)',
-                                                        border: '1px solid var(--color-border)',
-                                                        background: '#fff',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        overflow: 'hidden'
-                                                    }}>
-                                                        {currentProduct.image ? (
-                                                            <img src={currentProduct.image} alt={currentProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                        ) : (
-                                                            <ShoppingBag size={24} color="var(--color-text-muted)" />
+                            {/* Mobile Order Summary Content - Accordion Style */}
+                            {showSummaryMobile && (
+                                <div className="mobile-summary-content" style={{
+                                    marginTop: '1rem',
+                                    padding: '1.5rem',
+                                    backgroundColor: '#fafafa',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: 8,
+                                    animation: 'slideDown 0.3s ease-out'
+                                }}>
+                                    {productsLoading ? (
+                                        <div style={{ textAlign: 'center', padding: '2rem' }}>
+                                            <p style={{ color: 'var(--color-text-muted)' }}>Loading products...</p>
+                                        </div>
+                                    ) : productsError ? (
+                                        <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
+                                            Error loading products: {productsError}
+                                        </div>
+                                    ) : !currentProduct ? (
+                                        <div style={{ textAlign: 'center', padding: '2rem' }}>
+                                            <p style={{ color: 'var(--color-text-muted)' }}>No product selected</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Product Display */}
+                                            <div style={{ marginBottom: '1.5rem' }}>
+                                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+                                                    <div style={{ position: 'relative' }}>
+                                                        <div style={{
+                                                            width: 60,
+                                                            height: 60,
+                                                            borderRadius: 'var(--radius-md)',
+                                                            border: '1px solid var(--color-border)',
+                                                            background: '#fff',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            overflow: 'hidden'
+                                                        }}>
+                                                            {currentProduct.image ? (
+                                                                <img src={currentProduct.image} alt={currentProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                            ) : (
+                                                                <ShoppingBag size={24} color="var(--color-text-muted)" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{currentProduct.name}</div>
+                                                        {currentProduct.description && (
+                                                            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                                                                {currentProduct.description}
+                                                            </div>
                                                         )}
                                                     </div>
+                                                    <div style={{ fontWeight: 600 }}>${(currentProduct.interval === 'one_time' ? currentProduct.price * oneTimeQuantity : currentProduct.price).toFixed(2)}</div>
                                                 </div>
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>{currentProduct.name}</div>
-                                                    {currentProduct.description && (
-                                                        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                                                            {currentProduct.description}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div style={{ fontWeight: 600 }}>${(currentProduct.interval === 'one_time' ? currentProduct.price * oneTimeQuantity : currentProduct.price).toFixed(2)}</div>
                                             </div>
-                                        </div>
 
-                                        {/* Add-on Products - Mobile */}
-                                        {/* Add-on Products - Mobile
+                                            {/* Add-on Products - Mobile */}
+                                            {/* Add-on Products - Mobile
                                         {availableAddOns.length > 0 && (
                                             <div style={{
                                                 marginBottom: '1.5rem',
@@ -857,375 +861,407 @@ export default function CheckoutPage() {
                                         )}
                                         */}
 
-                                        {/* Discount Code - Mobile */}
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <FloatingLabelInput
-                                                    label="Discount code or gift card"
-                                                    value={discountCode}
-                                                    onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
-                                                    disabled={discountLoading || appliedDiscount}
-                                                />
-                                                <Button
-                                                    onClick={validateDiscountCode}
-                                                    disabled={discountLoading || appliedDiscount || !discountCode}
-                                                    className={`btn-apply-discount ${discountCode ? 'active' : ''}`}
-                                                    style={{
-                                                        width: 'auto',
-                                                        padding: '0 1.25rem',
-                                                        height: '48px',
-                                                        fontSize: '0.875rem',
-                                                        borderRadius: 'var(--radius-md)',
-                                                        whiteSpace: 'nowrap',
-                                                        fontWeight: 600
-                                                    }}
-                                                >
-                                                    {discountLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : appliedDiscount ? 'Applied' : 'Apply'}
-                                                </Button>
-                                            </div>
-                                            {discountError && (
-                                                <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                                                    {discountError}
+                                            {/* Discount Code - Mobile */}
+                                            <div style={{ marginBottom: '1.5rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <FloatingLabelInput
+                                                        label="Discount code or gift card"
+                                                        value={discountCode}
+                                                        onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                                                        disabled={discountLoading || appliedDiscount}
+                                                    />
+                                                    <Button
+                                                        onClick={validateDiscountCode}
+                                                        disabled={discountLoading || appliedDiscount || !discountCode}
+                                                        className={`btn-apply-discount ${discountCode ? 'active' : ''}`}
+                                                        style={{
+                                                            width: 'auto',
+                                                            padding: '0 1.25rem',
+                                                            height: '48px',
+                                                            fontSize: '0.875rem',
+                                                            borderRadius: 'var(--radius-md)',
+                                                            whiteSpace: 'nowrap',
+                                                            fontWeight: 600
+                                                        }}
+                                                    >
+                                                        {discountLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : appliedDiscount ? 'Applied' : 'Apply'}
+                                                    </Button>
                                                 </div>
-                                            )}
-                                            {appliedDiscount && (
-                                                <div style={{ color: '#166534', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 500 }}>
-                                                    ✓ {appliedDiscount.code} applied!
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Totals */}
-                                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Subtotal</span>
-                                                <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>${subtotal.toFixed(2)}</span>
-                                            </div>
-                                            {appliedDiscount && discountAmount > 0 && (
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.9rem', color: '#166534' }}>
-                                                    <span>Discount ({appliedDiscount.code})</span>
-                                                    <span style={{ fontWeight: 600 }}>
-                                                        -${discountAmount.toFixed(2)}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Shipping</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                                                    {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
-                                                        <span style={{ fontSize: '0.8rem' }}>Enter shipping address</span>
-                                                    ) : shippingLoading ? (
-                                                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                                                    ) : (
-                                                        <>
-                                                            {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
-                                                                <>
-                                                                    <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
-                                                                        $14.00
-                                                                    </span>
-                                                                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
-                                                                        $3.50
-                                                                    </span>
-                                                                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
-                                                                </>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
-                                                <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Total</span>
-                                                <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>${total.toFixed(2)}</span>
+                                                {discountError && (
+                                                    <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                                                        {discountError}
+                                                    </div>
+                                                )}
+                                                {appliedDiscount && (
+                                                    <div style={{ color: '#166534', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 500 }}>
+                                                        ✓ {appliedDiscount.code} applied!
+                                                    </div>
+                                                )}
                                             </div>
 
-                                            {/* Recurring Subtotal - Mobile */}
-                                            {recurringSubtotal > 0 && (
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                        <span>Recurring subtotal</span>
-                                                        <div
-                                                            onMouseEnter={() => setShowTooltip(true)}
-                                                            onMouseLeave={() => setShowTooltip(false)}
-                                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }}
-                                                        >
-                                                            <HelpCircle size={14} color="var(--color-text-muted)" />
-                                                            {showTooltip && (
-                                                                <div style={{
-                                                                    position: 'absolute',
-                                                                    bottom: '100%',
-                                                                    left: '50%',
-                                                                    transform: 'translateX(-50%)',
-                                                                    marginBottom: '0.75rem',
-                                                                    backgroundColor: '#1f2937',
-                                                                    color: '#fff',
-                                                                    padding: '0.75rem',
-                                                                    borderRadius: '0.375rem',
-                                                                    fontSize: '0.8rem',
-                                                                    width: '200px',
-                                                                    textAlign: 'center',
-                                                                    zIndex: 50,
-                                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                                                    lineHeight: '1.4',
-                                                                    pointerEvents: 'none'
-                                                                }}>
-                                                                    Does not include shipping, tax, duties, or any applicable discounts.
+                                            {/* Totals */}
+                                            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                                                    <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Subtotal</span>
+                                                    <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>${subtotal.toFixed(2)}</span>
+                                                </div>
+                                                {appliedDiscount && discountAmount > 0 && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.9rem', color: '#166534' }}>
+                                                        <span>Discount ({appliedDiscount.code})</span>
+                                                        <span style={{ fontWeight: 600 }}>
+                                                            -${discountAmount.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                                                    <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Shipping</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                                        {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
+                                                            <span style={{ fontSize: '0.8rem' }}>Enter shipping address</span>
+                                                        ) : shippingLoading ? (
+                                                            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                                        ) : (
+                                                            <>
+                                                                {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
+                                                                    <>
+                                                                        <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
+                                                                            $14.00
+                                                                        </span>
+                                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
+                                                                            $3.50
+                                                                        </span>
+                                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
+                                                                    </>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
+                                                    <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Total</span>
+                                                    <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>${total.toFixed(2)}</span>
+                                                </div>
+
+                                                {/* Recurring Subtotal - Mobile */}
+                                                {recurringSubtotal > 0 && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                            <span>Recurring subtotal</span>
+                                                            <div
+                                                                onMouseEnter={() => setShowTooltip(true)}
+                                                                onMouseLeave={() => setShowTooltip(false)}
+                                                                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }}
+                                                            >
+                                                                <HelpCircle size={14} color="var(--color-text-muted)" />
+                                                                {showTooltip && (
                                                                     <div style={{
                                                                         position: 'absolute',
-                                                                        top: '100%',
+                                                                        bottom: '100%',
                                                                         left: '50%',
                                                                         transform: 'translateX(-50%)',
-                                                                        borderWidth: '6px',
-                                                                        borderStyle: 'solid',
-                                                                        borderColor: '#1f2937 transparent transparent transparent'
-                                                                    }} />
-                                                                </div>
-                                                            )}
+                                                                        marginBottom: '0.75rem',
+                                                                        backgroundColor: '#1f2937',
+                                                                        color: '#fff',
+                                                                        padding: '0.75rem',
+                                                                        borderRadius: '0.375rem',
+                                                                        fontSize: '0.8rem',
+                                                                        width: '200px',
+                                                                        textAlign: 'center',
+                                                                        zIndex: 50,
+                                                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                                                        lineHeight: '1.4',
+                                                                        pointerEvents: 'none'
+                                                                    }}>
+                                                                        Does not include shipping, tax, duties, or any applicable discounts.
+                                                                        <div style={{
+                                                                            position: 'absolute',
+                                                                            top: '100%',
+                                                                            left: '50%',
+                                                                            transform: 'translateX(-50%)',
+                                                                            borderWidth: '6px',
+                                                                            borderStyle: 'solid',
+                                                                            borderColor: '#1f2937 transparent transparent transparent'
+                                                                        }} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
+                                                        <span>
+                                                            ${recurringSubtotal.toFixed(2)} {recurringIntervalText}
+                                                        </span>
                                                     </div>
-                                                    <span>
-                                                        ${recurringSubtotal.toFixed(2)} {recurringIntervalText}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div>
-                        {/* Express Checkout */}
-                        {clientSecret ? (
-                            <Elements key={`express-${clientSecret}`} stripe={stripePromise} options={{
-                                clientSecret,
-                                appearance: {
-                                    theme: 'stripe',
-                                    variables: {
-                                        colorPrimary: '#0f392b',
-                                        colorBackground: '#ffffff',
-                                        colorText: '#0f392b',
-                                        borderRadius: '10px',
-                                    }
-                                },
-                                paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
-                            }}>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
-                                        Express checkout
-                                    </div>
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <ExpressCheckoutElement options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }} />
-                                    </div>
-                                    <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
-                                        By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                                        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                        <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
-                                        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                            </Elements>
-                        ) : (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', marginBottom: '1.5rem' }}>
-                                <Loader2 size={30} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
-                            </div>
-                        )}
+                            )}
+                        </div>
 
-                        {/* Contact Section */}
-                        <section style={{ marginBottom: '2.5rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Contact</h2>
-                                <Link to="/login" state={{ from: location }} style={{ fontSize: '0.875rem', color: 'var(--color-primary)', textDecoration: 'underline' }}>Log in</Link>
-                            </div>
-
-                            <Input
-                                placeholder="Email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                onBlur={() => handleBlur('email', email, 'email')}
-                                error={errors.email}
-                            />
-                        </section>
-
-                        {/* Delivery Section */}
-                        <section style={{ marginBottom: '2.5rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Delivery</h2>
-
-                            <Select
-                                label="Country/Region"
-                                options={[{ value: 'US', label: 'United States' }]}
-                                value={delivery.country}
-                                onChange={(e) => setDelivery({ ...delivery, country: e.target.value })}
-                            />
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <Input
-                                    placeholder="First name"
-                                    value={delivery.firstName}
-                                    onChange={(e) => setDelivery({ ...delivery, firstName: e.target.value })}
-                                    onBlur={() => handleBlur('firstName', delivery.firstName, 'first name')}
-                                    error={errors.firstName}
-                                />
-                                <Input
-                                    placeholder="Last name"
-                                    value={delivery.lastName}
-                                    onChange={(e) => setDelivery({ ...delivery, lastName: e.target.value })}
-                                    onBlur={() => handleBlur('lastName', delivery.lastName, 'last name')}
-                                    error={errors.lastName}
-                                />
-                            </div>
-
-                            <Input
-                                placeholder="Company (optional)"
-                                value={delivery.company}
-                                onChange={(e) => setDelivery({ ...delivery, company: e.target.value })}
-                                onBlur={() => triggerCapture()}
-                            />
-
-                            <Input
-                                ref={addressInputRef}
-                                placeholder="Address"
-                                value={delivery.address}
-                                onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
-                                onBlur={() => handleBlur('address', delivery.address, 'address')}
-                                error={errors.address}
-                                rightIcon={<Search size={18} />}
-                            />
-
-                            <Input
-                                placeholder="Apartment, suite, etc. (optional)"
-                                value={delivery.apartment}
-                                onChange={(e) => setDelivery({ ...delivery, apartment: e.target.value })}
-                                onBlur={() => triggerCapture()}
-                            />
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                                <Input
-                                    placeholder="City"
-                                    value={delivery.city}
-                                    onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}
-                                    onBlur={() => handleBlur('city', delivery.city, 'city')}
-                                    error={errors.city}
-                                />
-                                <Select
-                                    options={[
-                                        { value: '', label: 'State' },
-                                        { value: 'AL', label: 'Alabama' },
-                                        { value: 'AK', label: 'Alaska' },
-                                        { value: 'AZ', label: 'Arizona' },
-                                        { value: 'AR', label: 'Arkansas' },
-                                        { value: 'CA', label: 'California' },
-                                        { value: 'CO', label: 'Colorado' },
-                                        { value: 'CT', label: 'Connecticut' },
-                                        { value: 'DE', label: 'Delaware' },
-                                        { value: 'DC', label: 'District Of Columbia' },
-                                        { value: 'FL', label: 'Florida' },
-                                        { value: 'GA', label: 'Georgia' },
-                                        { value: 'HI', label: 'Hawaii' },
-                                        { value: 'ID', label: 'Idaho' },
-                                        { value: 'IL', label: 'Illinois' },
-                                        { value: 'IN', label: 'Indiana' },
-                                        { value: 'IA', label: 'Iowa' },
-                                        { value: 'KS', label: 'Kansas' },
-                                        { value: 'KY', label: 'Kentucky' },
-                                        { value: 'LA', label: 'Louisiana' },
-                                        { value: 'ME', label: 'Maine' },
-                                        { value: 'MD', label: 'Maryland' },
-                                        { value: 'MA', label: 'Massachusetts' },
-                                        { value: 'MI', label: 'Michigan' },
-                                        { value: 'MN', label: 'Minnesota' },
-                                        { value: 'MS', label: 'Mississippi' },
-                                        { value: 'MO', label: 'Missouri' },
-                                        { value: 'MT', label: 'Montana' },
-                                        { value: 'NE', label: 'Nebraska' },
-                                        { value: 'NV', label: 'Nevada' },
-                                        { value: 'NH', label: 'New Hampshire' },
-                                        { value: 'NJ', label: 'New Jersey' },
-                                        { value: 'NM', label: 'New Mexico' },
-                                        { value: 'NY', label: 'New York' },
-                                        { value: 'NC', label: 'North Carolina' },
-                                        { value: 'ND', label: 'North Dakota' },
-                                        { value: 'OH', label: 'Ohio' },
-                                        { value: 'OK', label: 'Oklahoma' },
-                                        { value: 'OR', label: 'Oregon' },
-                                        { value: 'PA', label: 'Pennsylvania' },
-                                        { value: 'RI', label: 'Rhode Island' },
-                                        { value: 'SC', label: 'South Carolina' },
-                                        { value: 'SD', label: 'South Dakota' },
-                                        { value: 'TN', label: 'Tennessee' },
-                                        { value: 'TX', label: 'Texas' },
-                                        { value: 'UT', label: 'Utah' },
-                                        { value: 'VT', label: 'Vermont' },
-                                        { value: 'VA', label: 'Virginia' },
-                                        { value: 'WA', label: 'Washington' },
-                                        { value: 'WV', label: 'West Virginia' },
-                                        { value: 'WI', label: 'Wisconsin' },
-                                        { value: 'WY', label: 'Wyoming' }
-                                    ]}
-                                    value={delivery.state}
-                                    onChange={(e) => {
-                                        const newState = e.target.value;
-                                        setDelivery({ ...delivery, state: newState });
-                                        triggerCapture({ state: newState });
-                                    }}
-                                />
-                                <Input
-                                    placeholder="ZIP code"
-                                    value={delivery.zip}
-                                    onChange={(e) => setDelivery({ ...delivery, zip: e.target.value })}
-                                    onBlur={() => handleBlur('zip', delivery.zip, 'ZIP code')}
-                                    error={errors.zip}
-                                />
-                            </div>
-
-                            <Input
-                                placeholder="Phone"
-                                type="tel"
-                                value={delivery.phone}
-                                onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })}
-                                onBlur={() => handleBlur('phone', delivery.phone, 'phone')}
-                                error={errors.phone}
-                            />
-                        </section>
-
-                        {/* Shipping Method */}
-                        <section style={{ marginBottom: '2.5rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Shipping method</h2>
-
-                            {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
-                                <div style={{
-                                    padding: '1.5rem',
-                                    backgroundColor: '#f9fafb',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: '#6b7280',
-                                    textAlign: 'center',
-                                    fontSize: '0.95rem'
+                        <div>
+                            {/* Express Checkout */}
+                            {clientSecret ? (
+                                <Elements key={`express-${clientSecret}`} stripe={stripePromise} options={{
+                                    clientSecret,
+                                    appearance: {
+                                        theme: 'stripe',
+                                        variables: {
+                                            colorPrimary: '#0f392b',
+                                            colorBackground: '#ffffff',
+                                            colorText: '#0f392b',
+                                            borderRadius: '10px',
+                                        }
+                                    },
+                                    paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
                                 }}>
-                                    Enter your shipping address to view available shipping methods.
-                                </div>
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
+                                            Express checkout
+                                        </div>
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <ExpressCheckoutElement options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }} />
+                                        </div>
+                                        <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
+                                            By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+                                            <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
+                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+                                        </div>
+                                    </div>
+                                </Elements>
                             ) : (
-                                <>
-                                    {/* Shipping Logic: Show Subscription Shipping if ANY subscription product is present (Main or Add-on) */}
-                                    {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
-                                        /* Subscription Layout (Free Shipping) */
-                                        <>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>First shipment</h3>
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', marginBottom: '1.5rem' }}>
+                                    <Loader2 size={30} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
+                                </div>
+                            )}
+
+                            {/* Contact Section */}
+                            <section style={{ marginBottom: '2.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Contact</h2>
+                                    <Link to="/login" state={{ from: location }} style={{ fontSize: '0.875rem', color: 'var(--color-primary)', textDecoration: 'underline' }}>Log in</Link>
+                                </div>
+
+                                <Input
+                                    placeholder="Email"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    onBlur={() => handleBlur('email', email, 'email')}
+                                    error={errors.email}
+                                />
+                            </section>
+
+                            {/* Delivery Section */}
+                            <section style={{ marginBottom: '2.5rem' }}>
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Delivery</h2>
+
+                                <Select
+                                    label="Country/Region"
+                                    options={[{ value: 'US', label: 'United States' }]}
+                                    value={delivery.country}
+                                    onChange={(e) => setDelivery({ ...delivery, country: e.target.value })}
+                                />
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <Input
+                                        placeholder="First name"
+                                        value={delivery.firstName}
+                                        onChange={(e) => setDelivery({ ...delivery, firstName: e.target.value })}
+                                        onBlur={() => handleBlur('firstName', delivery.firstName, 'first name')}
+                                        error={errors.firstName}
+                                    />
+                                    <Input
+                                        placeholder="Last name"
+                                        value={delivery.lastName}
+                                        onChange={(e) => setDelivery({ ...delivery, lastName: e.target.value })}
+                                        onBlur={() => handleBlur('lastName', delivery.lastName, 'last name')}
+                                        error={errors.lastName}
+                                    />
+                                </div>
+
+                                <Input
+                                    placeholder="Company (optional)"
+                                    value={delivery.company}
+                                    onChange={(e) => setDelivery({ ...delivery, company: e.target.value })}
+                                    onBlur={() => triggerCapture()}
+                                />
+
+                                <Input
+                                    ref={addressInputRef}
+                                    placeholder="Address"
+                                    value={delivery.address}
+                                    onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
+                                    onBlur={() => handleBlur('address', delivery.address, 'address')}
+                                    error={errors.address}
+                                    rightIcon={<Search size={18} />}
+                                />
+
+                                <Input
+                                    placeholder="Apartment, suite, etc. (optional)"
+                                    value={delivery.apartment}
+                                    onChange={(e) => setDelivery({ ...delivery, apartment: e.target.value })}
+                                    onBlur={() => triggerCapture()}
+                                />
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                                    <Input
+                                        placeholder="City"
+                                        value={delivery.city}
+                                        onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}
+                                        onBlur={() => handleBlur('city', delivery.city, 'city')}
+                                        error={errors.city}
+                                    />
+                                    <Select
+                                        placeholder="State"
+                                        value={delivery.state}
+                                        onChange={(e) => setDelivery({ ...delivery, state: e.target.value })}
+                                        onBlur={() => handleBlur('state', delivery.state, 'state')}
+                                        options={[
+                                            { value: '', label: 'State' },
+                                            { value: 'AL', label: 'Alabama' },
+                                            { value: 'AK', label: 'Alaska' },
+                                            { value: 'AZ', label: 'Arizona' },
+                                            { value: 'AR', label: 'Arkansas' },
+                                            { value: 'CA', label: 'California' },
+                                            { value: 'CO', label: 'Colorado' },
+                                            { value: 'CT', label: 'Connecticut' },
+                                            { value: 'DE', label: 'Delaware' },
+                                            { value: 'DC', label: 'District Of Columbia' },
+                                            { value: 'FL', label: 'Florida' },
+                                            { value: 'GA', label: 'Georgia' },
+                                            { value: 'HI', label: 'Hawaii' },
+                                            { value: 'ID', label: 'Idaho' },
+                                            { value: 'IL', label: 'Illinois' },
+                                            { value: 'IN', label: 'Indiana' },
+                                            { value: 'IA', label: 'Iowa' },
+                                            { value: 'KS', label: 'Kansas' },
+                                            { value: 'KY', label: 'Kentucky' },
+                                            { value: 'LA', label: 'Louisiana' },
+                                            { value: 'ME', label: 'Maine' },
+                                            { value: 'MD', label: 'Maryland' },
+                                            { value: 'MA', label: 'Massachusetts' },
+                                            { value: 'MI', label: 'Michigan' },
+                                            { value: 'MN', label: 'Minnesota' },
+                                            { value: 'MS', label: 'Mississippi' },
+                                            { value: 'MO', label: 'Missouri' },
+                                            { value: 'MT', label: 'Montana' },
+                                            { value: 'NE', label: 'Nebraska' },
+                                            { value: 'NV', label: 'Nevada' },
+                                            { value: 'NH', label: 'New Hampshire' },
+                                            { value: 'NJ', label: 'New Jersey' },
+                                            { value: 'NM', label: 'New Mexico' },
+                                            { value: 'NY', label: 'New York' },
+                                            { value: 'NC', label: 'North Carolina' },
+                                            { value: 'ND', label: 'North Dakota' },
+                                            { value: 'OH', label: 'Ohio' },
+                                            { value: 'OK', label: 'Oklahoma' },
+                                            { value: 'OR', label: 'Oregon' },
+                                            { value: 'PA', label: 'Pennsylvania' },
+                                            { value: 'RI', label: 'Rhode Island' },
+                                            { value: 'SC', label: 'South Carolina' },
+                                            { value: 'SD', label: 'South Dakota' },
+                                            { value: 'TN', label: 'Tennessee' },
+                                            { value: 'TX', label: 'Texas' },
+                                            { value: 'UT', label: 'Utah' },
+                                            { value: 'VT', label: 'Vermont' },
+                                            { value: 'VA', label: 'Virginia' },
+                                            { value: 'WA', label: 'Washington' },
+                                            { value: 'WV', label: 'West Virginia' },
+                                            { value: 'WI', label: 'Wisconsin' },
+                                            { value: 'WY', label: 'Wyoming' }
+                                        ]}
+                                        error={errors.state}
+                                    />
+                                    <Input
+                                        placeholder="ZIP code"
+                                        value={delivery.zip}
+                                        onChange={(e) => setDelivery({ ...delivery, zip: e.target.value })}
+                                        onBlur={() => handleBlur('zip', delivery.zip, 'ZIP code')}
+                                        error={errors.zip}
+                                    />
+                                </div>
+
+                                <Input
+                                    placeholder="Phone"
+                                    value={delivery.phone}
+                                    onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })}
+                                    onBlur={() => handleBlur('phone', delivery.phone, 'phone number')}
+                                    error={errors.phone}
+                                    rightIcon={<HelpCircle size={18} color="#9ca3af" />}
+                                />
+                            </section>
+
+                            {/* Shipping Method */}
+                            <section style={{ marginBottom: '2.5rem' }}>
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Shipping method</h2>
+
+                                {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
+                                    <div style={{
+                                        padding: '1.5rem',
+                                        backgroundColor: '#f9fafb',
+                                        borderRadius: 'var(--radius-md)',
+                                        color: '#6b7280',
+                                        textAlign: 'center',
+                                        fontSize: '0.95rem'
+                                    }}>
+                                        Enter your shipping address to view available shipping methods.
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Shipping Logic: Show Subscription Shipping if ANY subscription product is present (Main or Add-on) */}
+                                        {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
+                                            /* Subscription Layout (Free Shipping) */
+                                            <>
+                                                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>First shipment</h3>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    backgroundColor: '#f0fdf4', // Light green background
+                                                    border: '1px solid #166534', // Dark green border
+                                                    borderRadius: 'var(--radius-md)',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    marginBottom: '1.5rem'
+                                                }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
+                                                        <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
+                                                        <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
+                                                    </div>
+                                                </div>
+
+                                                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>Recurring shipments</h3>
+                                                <div style={{
+                                                    padding: '1rem',
+                                                    backgroundColor: '#f9fafb',
+                                                    border: '1px solid #e5e7eb', // Light gray border
+                                                    borderRadius: 'var(--radius-md)',
+                                                    color: '#374151',
+                                                    fontSize: '0.95rem'
+                                                }}>
+                                                    Local Delivery · Free shipping for the first 4 weeks, followed by $14.00 every 4 weeks
+                                                </div>
+                                            </>
+                                        ) : (
+                                            /* One-time Purchase Layout ($3.50 -> FREE) */
                                             <div style={{
                                                 padding: '1rem',
-                                                backgroundColor: '#f0fdf4', // Light green background
-                                                border: '1px solid #166534', // Dark green border
+                                                backgroundColor: '#f0fdf4',
+                                                border: '1px solid #166534',
                                                 borderRadius: 'var(--radius-md)',
                                                 display: 'flex',
                                                 justifyContent: 'space-between',
                                                 alignItems: 'center',
-                                                marginBottom: '1.5rem'
                                             }}>
                                                 <div>
                                                     <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
@@ -1236,101 +1272,69 @@ export default function CheckoutPage() {
                                                     <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
                                                 </div>
                                             </div>
+                                        )}
+                                    </>
+                                )}
+                            </section>
 
-                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem', color: '#111827' }}>Recurring shipments</h3>
-                                            <div style={{
-                                                padding: '1rem',
-                                                backgroundColor: '#f9fafb',
-                                                border: '1px solid #e5e7eb', // Light gray border
-                                                borderRadius: 'var(--radius-md)',
-                                                color: '#374151',
-                                                fontSize: '0.95rem'
-                                            }}>
-                                                Local Delivery · Free shipping for the first 4 weeks, followed by $14.00 every 4 weeks
-                                            </div>
-                                        </>
-                                    ) : (
-                                        /* One-time Purchase Layout ($3.50 -> FREE) */
-                                        <div style={{
-                                            padding: '1rem',
-                                            backgroundColor: '#f0fdf4',
-                                            border: '1px solid #166534',
-                                            borderRadius: 'var(--radius-md)',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                        }}>
-                                            <div>
-                                                <div style={{ fontWeight: 500, color: '#111827' }}>Standard</div>
-                                                <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>(3-5 business days)</div>
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '0.85rem' }}>$3.50</div>
-                                                <div style={{ fontWeight: 700, color: '#111827' }}>FREE</div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </section>
+                            {/* Payment Section */}
+                            <section style={{ marginBottom: '2.5rem' }}>
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Payment</h2>
+                                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+                                    All transactions are secure and encrypted.
+                                </p>
 
-                        {/* Payment Section */}
-                        <section style={{ marginBottom: '2.5rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Payment</h2>
-                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
-                                All transactions are secure and encrypted.
-                            </p>
-
-                            {clientSecret ? (
-                                <div style={{
-                                    padding: '1.5rem',
-                                    border: '1px solid var(--color-border)',
-                                    borderRadius: 'var(--radius-md)',
-                                    backgroundColor: '#fff'
-                                }}>
-                                    <Elements key={`payment-${clientSecret}`} stripe={stripePromise} options={{
-                                        clientSecret,
-                                        appearance: {
-                                            theme: 'stripe',
-                                            variables: {
-                                                colorPrimary: '#0f392b',
-                                                colorBackground: '#ffffff',
-                                                colorText: '#0f392b',
-                                                borderRadius: '10px',
-                                            }
-                                        },
-                                        paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
+                                {clientSecret ? (
+                                    <div style={{
+                                        padding: '1.5rem',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: 'var(--radius-md)',
+                                        backgroundColor: '#fff'
                                     }}>
-                                        <CheckoutForm
-                                            billingAddress={billingAddress}
-                                            setBillingAddress={setBillingAddress}
-                                            sameAsShipping={sameAsShipping}
-                                            setSameAsShipping={setSameAsShipping}
-                                            onCapture={triggerCapture}
-                                            onValidate={validateForm}
-                                        />
-                                    </Elements>
-                                </div>
-                            ) : (
-                                <div style={{
-                                    padding: '2rem',
-                                    textAlign: 'center',
-                                    background: '#f9fafb',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: 'var(--color-text-muted)',
-                                    border: '1px dashed var(--color-border)'
-                                }}>
-                                    {loading ? 'Initializing secure checkout...' : 'Please enter your email to load payment options.'}
+                                        <Elements key={`payment-${clientSecret}`} stripe={stripePromise} options={{
+                                            clientSecret,
+                                            appearance: {
+                                                theme: 'stripe',
+                                                variables: {
+                                                    colorPrimary: '#0f392b',
+                                                    colorBackground: '#ffffff',
+                                                    colorText: '#0f392b',
+                                                    borderRadius: '10px',
+                                                }
+                                            },
+                                            paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
+                                        }}>
+                                            <CheckoutForm
+                                                billingAddress={billingAddress}
+                                                setBillingAddress={setBillingAddress}
+                                                sameAsShipping={sameAsShipping}
+                                                setSameAsShipping={setSameAsShipping}
+                                                onCapture={triggerCapture}
+                                                onValidate={validateForm}
+                                            />
+                                        </Elements>
+                                    </div>
+                                ) : (
+                                    <div style={{
+                                        padding: '2rem',
+                                        textAlign: 'center',
+                                        background: '#f9fafb',
+                                        borderRadius: 'var(--radius-md)',
+                                        color: 'var(--color-text-muted)',
+                                        border: '1px dashed var(--color-border)'
+                                    }}>
+                                        {loading ? 'Initializing secure checkout...' : 'Please enter your email to load payment options.'}
+                                    </div>
+                                )}
+                            </section>
+
+                            {/* Global Initialization Error */}
+                            {error && !clientSecret && (
+                                <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
+                                    Error loading checkout: {error}
                                 </div>
                             )}
-                        </section>
-
-                        {/* Global Initialization Error */}
-                        {error && !clientSecret && (
-                            <div style={{ marginTop: '1rem', padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
-                                Error loading checkout: {error}
-                            </div>
-                        )}
+                        </div>
                     </div>
 
                 </div>
@@ -1338,104 +1342,40 @@ export default function CheckoutPage() {
                 {/* Right Column: Order Summary - Desktop Only */}
                 <div className={`checkout-right desktop-summary`} style={{
                     flex: '1 1 450px',
-                    backgroundColor: '#fafafa', // Grey background
-                    padding: '4rem 10% 4rem 5%', // Right padding larger
+                    backgroundColor: '#f4f4f5', // Slightly darker grey background
+                    padding: '4rem 2rem 4rem 0', // Reduced padding
+                    display: 'flex',
+                    justifyContent: 'flex-start', // Align content to the left (towards center)
+                    alignItems: 'flex-start', // Prevent stretching, enables sticky child
                     borderLeft: '1px solid #e5e7eb',
                     height: 'auto',
                     minHeight: '100%',
-                    maxWidth: '100%'
+                    maxWidth: '100%',
+                    position: 'relative' // Ensure stacking context if needed
                 }}>
-
-                    {productsLoading ? (
-                        <div style={{ textAlign: 'center', padding: '2rem' }}>
-                            <p style={{ color: 'var(--color-text-muted)' }}>Loading products...</p>
-                        </div>
-                    ) : productsError ? (
-                        <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
-                            Error loading products: {productsError}
-                        </div>
-                    ) : !currentProduct ? (
-                        <div style={{ textAlign: 'center', padding: '2rem' }}>
-                            <p style={{ color: 'var(--color-text-muted)' }}>No product selected</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
-                                {/* Main Product */}
-                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <div style={{
-                                            width: 72,
-                                            height: 72,
-                                            borderRadius: 'var(--radius-md)',
-                                            border: '1px solid var(--color-border)',
-                                            background: '#f9fafb',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            overflow: 'hidden'
-                                        }}>
-                                            {currentProduct.image ? (
-                                                <img src={currentProduct.image} alt={currentProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            ) : (
-                                                <ShoppingBag size={32} color="var(--color-text-muted)" />
-                                            )}
-                                        </div>
-                                        <span style={{
-                                            position: 'absolute',
-                                            top: -10,
-                                            right: -10,
-                                            background: 'var(--color-text-muted)',
-                                            color: 'white',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            width: 24,
-                                            height: 24,
-                                            borderRadius: '50%',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            border: '2px solid white'
-                                        }}>1</span>
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>{currentProduct.name}</h3>
-                                        {currentProduct.description && (
-                                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>{currentProduct.description}</p>
-                                        )}
-                                        {currentProduct.interval === 'one_time' && (
-                                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                                                One-time Purchase
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div style={{ fontWeight: 600, fontSize: '1.125rem' }}>
-                                        ${(currentProduct.interval === 'one_time' ? currentProduct.price * oneTimeQuantity : currentProduct.price).toFixed(2)}
-                                    </div>
-                                </div>
-
-                                {/* Quantity Selector for Main Product (if One-time) */}
-                                {currentProduct.interval === 'one_time' && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', marginLeft: '88px' }}>
-                                        <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Quantity:</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                            <button
-                                                onClick={() => setOneTimeQuantity(Math.max(1, oneTimeQuantity - 1))}
-                                                style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
-                                            >-</button>
-                                            <div style={{ width: 40, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600, borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)' }}>
-                                                {oneTimeQuantity}
-                                            </div>
-                                            <button
-                                                onClick={() => setOneTimeQuantity(oneTimeQuantity + 1)}
-                                                style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
-                                            >+</button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Add-on Products (if selected) */}
-                                {selectedAddOnProduct && (
+                    <div style={{
+                        position: 'sticky',
+                        top: '2rem',
+                        width: '100%',
+                        maxWidth: '450px', // Squeezed max width
+                        paddingLeft: '2rem' // Gutter
+                    }}>
+                        {productsLoading ? (
+                            <div style={{ textAlign: 'center', padding: '2rem' }}>
+                                <p style={{ color: 'var(--color-text-muted)' }}>Loading products...</p>
+                            </div>
+                        ) : productsError ? (
+                            <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: 'var(--radius-md)' }}>
+                                Error loading products: {productsError}
+                            </div>
+                        ) : !currentProduct ? (
+                            <div style={{ textAlign: 'center', padding: '2rem' }}>
+                                <p style={{ color: 'var(--color-text-muted)' }}>No product selected</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
+                                    {/* Main Product */}
                                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                         <div style={{ position: 'relative' }}>
                                             <div style={{
@@ -1449,8 +1389,8 @@ export default function CheckoutPage() {
                                                 justifyContent: 'center',
                                                 overflow: 'hidden'
                                             }}>
-                                                {selectedAddOnProduct.image ? (
-                                                    <img src={selectedAddOnProduct.image} alt={selectedAddOnProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                {currentProduct.image ? (
+                                                    <img src={currentProduct.image} alt={currentProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                 ) : (
                                                     <ShoppingBag size={32} color="var(--color-text-muted)" />
                                                 )}
@@ -1473,95 +1413,169 @@ export default function CheckoutPage() {
                                             }}>1</span>
                                         </div>
                                         <div style={{ flex: 1 }}>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>{selectedAddOnProduct.name}</h3>
-                                            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                                                Subscription Add-on
-                                            </p>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>{currentProduct.name}</h3>
+                                            {currentProduct.description && (
+                                                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>{currentProduct.description}</p>
+                                            )}
+                                            {currentProduct.interval === 'one_time' && (
+                                                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                                                    One-time Purchase
+                                                </p>
+                                            )}
                                         </div>
                                         <div style={{ fontWeight: 600, fontSize: '1.125rem' }}>
-                                            ${(selectedAddOnProduct.interval === 'one_time' ? selectedAddOnProduct.price * oneTimeQuantity : selectedAddOnProduct.price).toFixed(2)}
+                                            ${(currentProduct.interval === 'one_time' ? currentProduct.price * oneTimeQuantity : currentProduct.price).toFixed(2)}
                                         </div>
                                     </div>
-                                )}
 
-                                {/* Quantity Selector for Add-on Product (if One-time) */}
-                                {selectedAddOnProduct && selectedAddOnProduct.interval === 'one_time' && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', marginLeft: '88px' }}>
-                                        <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Quantity:</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                            <button
-                                                onClick={() => setOneTimeQuantity(Math.max(1, oneTimeQuantity - 1))}
-                                                style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
-                                            >-</button>
-                                            <div style={{ width: 40, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600, borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)' }}>
-                                                {oneTimeQuantity}
+                                    {/* Quantity Selector for Main Product (if One-time) */}
+                                    {currentProduct.interval === 'one_time' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', marginLeft: '88px' }}>
+                                            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Quantity:</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                                                <button
+                                                    onClick={() => setOneTimeQuantity(Math.max(1, oneTimeQuantity - 1))}
+                                                    style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                >-</button>
+                                                <div style={{ width: 40, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600, borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)' }}>
+                                                    {oneTimeQuantity}
+                                                </div>
+                                                <button
+                                                    onClick={() => setOneTimeQuantity(oneTimeQuantity + 1)}
+                                                    style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                >+</button>
                                             </div>
-                                            <button
-                                                onClick={() => setOneTimeQuantity(oneTimeQuantity + 1)}
-                                                style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
-                                            >+</button>
                                         </div>
+                                    )}
+
+                                    {/* Add-on Products (if selected) */}
+                                    {selectedAddOnProduct && (
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            <div style={{ position: 'relative' }}>
+                                                <div style={{
+                                                    width: 72,
+                                                    height: 72,
+                                                    borderRadius: 'var(--radius-md)',
+                                                    border: '1px solid var(--color-border)',
+                                                    background: '#f9fafb',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    overflow: 'hidden'
+                                                }}>
+                                                    {selectedAddOnProduct.image ? (
+                                                        <img src={selectedAddOnProduct.image} alt={selectedAddOnProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <ShoppingBag size={32} color="var(--color-text-muted)" />
+                                                    )}
+                                                </div>
+                                                <span style={{
+                                                    position: 'absolute',
+                                                    top: -10,
+                                                    right: -10,
+                                                    background: 'var(--color-text-muted)',
+                                                    color: 'white',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 600,
+                                                    width: 24,
+                                                    height: 24,
+                                                    borderRadius: '50%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    border: '2px solid white'
+                                                }}>1</span>
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>{selectedAddOnProduct.name}</h3>
+                                                <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                                                    Subscription Add-on
+                                                </p>
+                                            </div>
+                                            <div style={{ fontWeight: 600, fontSize: '1.125rem' }}>
+                                                ${(selectedAddOnProduct.interval === 'one_time' ? selectedAddOnProduct.price * oneTimeQuantity : selectedAddOnProduct.price).toFixed(2)}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Quantity Selector for Add-on Product (if One-time) */}
+                                    {selectedAddOnProduct && selectedAddOnProduct.interval === 'one_time' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', marginLeft: '88px' }}>
+                                            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>Quantity:</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                                                <button
+                                                    onClick={() => setOneTimeQuantity(Math.max(1, oneTimeQuantity - 1))}
+                                                    style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                >-</button>
+                                                <div style={{ width: 40, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 600, borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)' }}>
+                                                    {oneTimeQuantity}
+                                                </div>
+                                                <button
+                                                    onClick={() => setOneTimeQuantity(oneTimeQuantity + 1)}
+                                                    style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', border: 'none', cursor: 'pointer', color: 'var(--color-text-main)' }}
+                                                >+</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Plan Selector (Quick Switch) - Hide if product is pre-selected via URL */}
+                                {!productSlug && (
+                                    <div style={{ marginBottom: '2rem' }}>
+                                        <Select
+                                            label="Change Plan"
+                                            value={selectedPriceId}
+                                            onChange={(e) => {
+                                                setSelectedPriceId(e.target.value);
+                                                setClientSecret(null); // Force reset to prevent paying for old plan
+                                            }}
+                                            options={products.map(product => ({
+                                                value: product.id,
+                                                label: `${product.name} ($${product.price.toFixed(2)})`
+                                            }))}
+                                        />
                                     </div>
                                 )}
-                            </div>
 
-                            {/* Plan Selector (Quick Switch) - Hide if product is pre-selected via URL */}
-                            {!productSlug && (
+                                {/* Discount Code */}
                                 <div style={{ marginBottom: '2rem' }}>
-                                    <Select
-                                        label="Change Plan"
-                                        value={selectedPriceId}
-                                        onChange={(e) => {
-                                            setSelectedPriceId(e.target.value);
-                                            setClientSecret(null); // Force reset to prevent paying for old plan
-                                        }}
-                                        options={products.map(product => ({
-                                            value: product.id,
-                                            label: `${product.name} ($${product.price.toFixed(2)})`
-                                        }))}
-                                    />
-                                </div>
-                            )}
-
-                            {/* Discount Code */}
-                            <div style={{ marginBottom: '2rem' }}>
-                                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                    <FloatingLabelInput
-                                        label="Discount code or gift card"
-                                        value={discountCode}
-                                        onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
-                                        disabled={discountLoading || appliedDiscount}
-                                    />
-                                    <Button
-                                        onClick={validateDiscountCode}
-                                        disabled={discountLoading || appliedDiscount || !discountCode}
-                                        className={`btn-apply-discount ${discountCode ? 'active' : ''}`}
-                                        style={{
-                                            width: 'auto',
-                                            padding: '0 1.5rem',
-                                            height: '48px',
-                                            fontSize: '0.95rem',
-                                            borderRadius: 'var(--radius-md)',
-                                            whiteSpace: 'nowrap',
-                                            fontWeight: 600
-                                        }}
-                                    >
-                                        {discountLoading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : appliedDiscount ? 'Applied' : 'Apply'}
-                                    </Button>
-                                </div>
-                                {discountError && (
-                                    <div style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                                        {discountError}
+                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                        <FloatingLabelInput
+                                            label="Discount code or gift card"
+                                            value={discountCode}
+                                            onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                                            disabled={discountLoading || appliedDiscount}
+                                        />
+                                        <Button
+                                            onClick={validateDiscountCode}
+                                            disabled={discountLoading || appliedDiscount || !discountCode}
+                                            className={`btn-apply-discount ${discountCode ? 'active' : ''}`}
+                                            style={{
+                                                width: 'auto',
+                                                padding: '0 1.5rem',
+                                                height: '48px',
+                                                fontSize: '0.95rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                whiteSpace: 'nowrap',
+                                                fontWeight: 600
+                                            }}
+                                        >
+                                            {discountLoading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : appliedDiscount ? 'Applied' : 'Apply'}
+                                        </Button>
                                     </div>
-                                )}
-                                {appliedDiscount && (
-                                    <div style={{ color: '#166534', fontSize: '0.875rem', marginTop: '0.5rem', fontWeight: 500 }}>
-                                        ✓ {appliedDiscount.code} applied!
-                                    </div>
-                                )}
-                            </div>
+                                    {discountError && (
+                                        <div style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                                            {discountError}
+                                        </div>
+                                    )}
+                                    {appliedDiscount && (
+                                        <div style={{ color: '#166534', fontSize: '0.875rem', marginTop: '0.5rem', fontWeight: 500 }}>
+                                            ✓ {appliedDiscount.code} applied!
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Add-on Feature Box
+                                {/* Add-on Feature Box
                             {availableAddOns.length > 0 && (
                                 <div style={{
                                     marginBottom: '2rem',
@@ -1626,131 +1640,130 @@ export default function CheckoutPage() {
                             )}
                             */}
 
-                            {/* Totals */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                                    <span>Subtotal</span>
-                                    <span style={{ color: 'var(--color-text-main)', fontWeight: 500 }}>
-                                        ${subtotal.toFixed(2)}
-                                    </span>
-                                </div>
-                                {appliedDiscount && discountAmount > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#166534' }}>
-                                        <span>Discount ({appliedDiscount.code})</span>
-                                        <span style={{ fontWeight: 600 }}>
-                                            -${discountAmount.toFixed(2)}
+                                {/* Totals */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                        <span>Subtotal</span>
+                                        <span style={{ color: 'var(--color-text-main)', fontWeight: 500 }}>
+                                            ${subtotal.toFixed(2)}
                                         </span>
                                     </div>
-                                )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                                    <span>Shipping</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                                        {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
-                                            <span style={{ fontSize: '0.8rem' }}>Enter shipping address</span>
-                                        ) : shippingLoading ? (
-                                            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                                        ) : (
-                                            <>
-                                                {/* Shipping Cost Display Logic */}
-                                                {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
-                                                    /* Subscription Shipping ($14.00 -> FREE) */
-                                                    <>
-                                                        <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
-                                                            $14.00
-                                                        </span>
-                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
-                                                    </>
-                                                ) : (
-                                                    /* One-time Shipping ($3.50 -> FREE) */
-                                                    <>
-                                                        <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
-                                                            $3.50
-                                                        </span>
-                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
-                                                    </>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)', alignItems: 'baseline' }}>
-                                    <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Total</span>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginRight: '0.5rem' }}>USD</span>
-                                        <span style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-primary)' }}>
-                                            ${total.toFixed(2)}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {recurringSubtotal > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            <span>Recurring subtotal</span>
-                                            <div
-                                                onMouseEnter={() => setShowTooltip(true)}
-                                                onMouseLeave={() => setShowTooltip(false)}
-                                                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }}
-                                            >
-                                                <HelpCircle size={14} color="var(--color-text-muted)" />
-                                                {showTooltip && (
-                                                    <div style={{
-                                                        position: 'absolute',
-                                                        bottom: '100%',
-                                                        left: '50%',
-                                                        transform: 'translateX(-50%)',
-                                                        marginBottom: '0.75rem',
-                                                        backgroundColor: '#1f2937',
-                                                        color: '#fff',
-                                                        padding: '0.75rem',
-                                                        borderRadius: '0.375rem',
-                                                        fontSize: '0.8rem',
-                                                        width: '200px',
-                                                        textAlign: 'center',
-                                                        zIndex: 50,
-                                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                                        lineHeight: '1.4',
-                                                        pointerEvents: 'none'
-                                                    }}>
-                                                        Does not include shipping, tax, duties, or any applicable discounts.
-                                                        {/* Arrow */}
-                                                        <div style={{
-                                                            position: 'absolute',
-                                                            top: '100%',
-                                                            left: '50%',
-                                                            transform: 'translateX(-50%)',
-                                                            borderWidth: '6px',
-                                                            borderStyle: 'solid',
-                                                            borderColor: '#1f2937 transparent transparent transparent'
-                                                        }} />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <span>
-                                            ${recurringSubtotal.toFixed(2)} {recurringIntervalText}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {delivery.address && delivery.city && delivery.state && delivery.zip && !shippingLoading && (() => {
-                                    const shippingSavings = (currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? 14.00 : 3.50;
-                                    const totalSavings = shippingSavings + discountAmount;
-                                    return (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                            <Tag size={16} />
-                                            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>TOTAL SAVINGS</span>
-                                            <span style={{ fontWeight: 700, fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-                                                ${totalSavings.toFixed(2)}
+                                    {appliedDiscount && discountAmount > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#166534' }}>
+                                            <span>Discount ({appliedDiscount.code})</span>
+                                            <span style={{ fontWeight: 600 }}>
+                                                -${discountAmount.toFixed(2)}
                                             </span>
                                         </div>
-                                    );
-                                })()}
-                            </div>
-                        </>
-                    )}
+                                    )}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                        <span>Shipping</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                            {(!delivery.address || !delivery.city || !delivery.state || !delivery.zip) ? (
+                                                <span style={{ fontSize: '0.8rem' }}>Enter shipping address</span>
+                                            ) : shippingLoading ? (
+                                                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                            ) : (
+                                                <>
+                                                    {/* Shipping Cost Display Logic */}
+                                                    {(currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? (
+                                                        /* Subscription Shipping ($14.00 -> FREE) */
+                                                        <>
+                                                            <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
+                                                                $14.00
+                                                            </span>
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
+                                                        </>
+                                                    ) : (
+                                                        /* One-time Shipping ($3.50 -> FREE) */
+                                                        <>
+                                                            <span style={{ textDecoration: 'line-through', color: '#6b7280', marginRight: '0.5rem', fontSize: '0.9rem' }}>
+                                                                $3.50
+                                                            </span>
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#166534' }}>FREE</span>
+                                                        </>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)', alignItems: 'baseline' }}>
+                                        <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Total</span>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginRight: '0.5rem' }}>USD</span>
+                                            <span style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--color-primary)' }}>
+                                                ${total.toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </div>
 
+                                    {recurringSubtotal > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                <span>Recurring subtotal</span>
+                                                <div
+                                                    onMouseEnter={() => setShowTooltip(true)}
+                                                    onMouseLeave={() => setShowTooltip(false)}
+                                                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }}
+                                                >
+                                                    <HelpCircle size={14} color="var(--color-text-muted)" />
+                                                    {showTooltip && (
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            bottom: '100%',
+                                                            left: '50%',
+                                                            transform: 'translateX(-50%)',
+                                                            marginBottom: '0.75rem',
+                                                            backgroundColor: '#1f2937',
+                                                            color: '#fff',
+                                                            padding: '0.75rem',
+                                                            borderRadius: '0.375rem',
+                                                            fontSize: '0.8rem',
+                                                            width: '200px',
+                                                            textAlign: 'center',
+                                                            zIndex: 50,
+                                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                                            lineHeight: '1.4',
+                                                            pointerEvents: 'none'
+                                                        }}>
+                                                            Does not include shipping, tax, duties, or any applicable discounts.
+                                                            {/* Arrow */}
+                                                            <div style={{
+                                                                position: 'absolute',
+                                                                top: '100%',
+                                                                left: '50%',
+                                                                transform: 'translateX(-50%)',
+                                                                borderWidth: '6px',
+                                                                borderStyle: 'solid',
+                                                                borderColor: '#1f2937 transparent transparent transparent'
+                                                            }} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span>
+                                                ${recurringSubtotal.toFixed(2)} {recurringIntervalText}
+                                            </span>
+                                        </div>
+                                    )}
 
+                                    {delivery.address && delivery.city && delivery.state && delivery.zip && !shippingLoading && (() => {
+                                        const shippingSavings = (currentProduct?.interval !== 'one_time' || (selectedAddOnProduct && selectedAddOnProduct.interval !== 'one_time')) ? 14.00 : 3.50;
+                                        const totalSavings = shippingSavings + discountAmount;
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                                <Tag size={16} />
+                                                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>TOTAL SAVINGS</span>
+                                                <span style={{ fontWeight: 700, fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+                                                    ${totalSavings.toFixed(2)}
+                                                </span>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
 
             </div>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
+import { ShoppingBag } from 'lucide-react';
 import Modal from './ui/Modal';
 import { policies } from '../data/policies.jsx';
 
@@ -9,31 +10,46 @@ export default function Layout({ children }) {
     return (
         <div style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
-            {/* Header */}
-            <header style={{
-                width: '100%',
-                backgroundColor: '#ffffff',
-                padding: '2rem 0',
-                textAlign: 'center',
-                borderBottom: '1px solid #e5e7eb',
-                // boxShadow: '0 1px 3px rgba(0,0,0,0.05)', // Optional subtle shadow
-                zIndex: 20,
-            }}>
-                <Link to="/" style={{
-                    textDecoration: 'none',
-                    display: 'inline-block',
+            <header className="layout-header">
+                <div style={{
+                    width: '100%',
+                    maxWidth: '1050px', // Matches the "squeezed" checkout content width
+                    margin: '0 auto',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0 2rem' // Outer safe area
                 }}>
-                    <img
-                        src="/logo-full-color.png"
-                        alt="702Greens"
-                        style={{
-                            height: '80px', // Adjusted height based on screenshot
-                            width: 'auto',
-                            display: 'block',
-                            margin: '0 auto',
-                        }}
-                    />
-                </Link>
+                    {/* Left: Logo */}
+                    <Link to="/" style={{
+                        textDecoration: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                    }}>
+                        <img
+                            src="/logo-full-color.png"
+                            alt="702Greens"
+                            style={{
+                                height: '60px',
+                                width: 'auto',
+                                display: 'block',
+                            }}
+                        />
+                    </Link>
+
+                    {/* Right: Shopping Cart Icon */}
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div style={{
+                            color: '#2563eb',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'default'
+                        }}>
+                            <ShoppingBag size={24} strokeWidth={2} />
+                        </div>
+                    </div>
+                </div>
             </header>
 
             {/* Main Content */}

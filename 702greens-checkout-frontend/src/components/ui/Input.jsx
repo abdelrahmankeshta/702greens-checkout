@@ -1,6 +1,8 @@
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 
-export const Input = forwardRef(({ label, error, rightIcon, ...props }, ref) => {
+export const Input = forwardRef(({ label, error, rightIcon, onFocus, onBlur, ...props }, ref) => {
+    const [isFocused, setIsFocused] = useState(false);
+
     return (
         <div style={{ marginBottom: '1rem', position: 'relative' }}>
             {label && (
@@ -22,16 +24,20 @@ export const Input = forwardRef(({ label, error, rightIcon, ...props }, ref) => 
                         padding: '0.75rem',
                         paddingRight: rightIcon ? '2.5rem' : '0.75rem',
                         borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${error ? '#ef4444' : 'var(--color-border)'}`,
+                        border: `1px solid ${error ? '#ef4444' : isFocused ? '#0f392b' : '#e5e7eb'}`, // State-based border
                         fontSize: '1rem',
                         outline: 'none',
-                        transition: 'border-color 0.2s',
+                        transition: 'border-color 0.2s, box-shadow 0.2s',
                         backgroundColor: 'var(--color-bg-input)',
+                        boxShadow: error ? 'none' : isFocused ? '0 0 0 1px #0f392b' : 'none' // State-based shadow
                     }}
-                    onFocus={(e) => e.target.style.borderColor = error ? '#ef4444' : 'var(--color-border-focus)'}
+                    onFocus={(e) => {
+                        setIsFocused(true);
+                        if (onFocus) onFocus(e);
+                    }}
                     onBlur={(e) => {
-                        e.target.style.borderColor = error ? '#ef4444' : 'var(--color-border)';
-                        if (props.onBlur) props.onBlur(e);
+                        setIsFocused(false);
+                        if (onBlur) onBlur(e);
                     }}
                     {...props}
                 />
