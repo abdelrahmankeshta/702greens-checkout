@@ -69,6 +69,7 @@ export default function CheckoutPage() {
 
     // Payment State
     const [clientSecret, setClientSecret] = useState(''); // Changed from null
+    const [isSetupMode, setIsSetupMode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [showSummaryMobile, setShowSummaryMobile] = useState(false);
@@ -1317,6 +1318,7 @@ export default function CheckoutPage() {
                                                 billingAddress={billingAddress}
                                                 setBillingAddress={setBillingAddress}
                                                 sameAsShipping={sameAsShipping}
+                                                isSetupMode={isSetupMode}
                                                 setSameAsShipping={setSameAsShipping}
                                                 onCapture={triggerCapture}
                                                 onValidate={validateForm}

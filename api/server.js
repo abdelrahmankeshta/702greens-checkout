@@ -422,27 +422,43 @@ app.post('/api/create-subscription', async (req, res) => {
             let latestInvoice = subscription.latest_invoice;
             paymentIntent = latestInvoice.payment_intent;
 
-            // Update PaymentIntent metadata
-            if (paymentIntent) {
-                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                    automatic_payment_methods: { enabled: true },
-                    metadata: {
-                        invoice_id: latestInvoice.id,
-                        subscription_id: subscription.id,
-                    },
-                });
-            }
-            if (!paymentIntent) {
-                paymentIntent = await stripe.paymentIntents.create({
-                    amount: latestInvoice.amount_due,
-                    currency: latestInvoice.currency,
+            // Handle $0 Invoice (Discounted to Free)
+            if (!paymentIntent && latestInvoice.amount_due === 0) {
+                const setupIntent = await stripe.setupIntents.create({
                     customer: customer.id,
+                    payment_method_types: ['card', 'link'],
                     metadata: {
-                        invoice_id: latestInvoice.id,
                         subscription_id: subscription.id,
                     },
-                    automatic_payment_methods: { enabled: true },
                 });
+                responseData.clientSecret = setupIntent.client_secret;
+                responseData.isSetup = true;
+            } else {
+                if (paymentIntent) {
+                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                        automatic_payment_methods: { enabled: true },
+                        metadata: {
+                            invoice_id: latestInvoice.id,
+                            subscription_id: subscription.id,
+                        },
+                    });
+                }
+                // If not zero AND no intent (should not happen for default_incomplete), we might need to create one,
+                // but default_incomplete guarantees an intent unless amount is 0.
+                // Keeping fallback just in case:
+                if (!paymentIntent && latestInvoice.amount_due > 0) {
+                    paymentIntent = await stripe.paymentIntents.create({
+                        amount: latestInvoice.amount_due,
+                        currency: latestInvoice.currency,
+                        customer: customer.id,
+                        metadata: {
+                            invoice_id: latestInvoice.id,
+                            subscription_id: subscription.id,
+                        },
+                        automatic_payment_methods: { enabled: true },
+                    });
+                }
+                if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
             }
 
             responseData.clientSecret = paymentIntent.client_secret;
@@ -506,30 +522,42 @@ app.post('/api/create-subscription', async (req, res) => {
                 let latestInvoice = subscription.latest_invoice;
                 paymentIntent = latestInvoice.payment_intent;
 
-                // Update PaymentIntent
-                if (paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                        automatic_payment_methods: { enabled: true },
-                        metadata: {
-                            invoice_id: latestInvoice.id,
-                            subscription_id: subscription.id,
-                        },
-                    });
-                }
-                if (!paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.create({
-                        amount: latestInvoice.amount_due,
-                        currency: latestInvoice.currency,
+                // Handle $0 Invoice
+                if (!paymentIntent && latestInvoice.amount_due === 0) {
+                    const setupIntent = await stripe.setupIntents.create({
                         customer: customer.id,
+                        payment_method_types: ['card', 'link'],
                         metadata: {
-                            invoice_id: latestInvoice.id,
                             subscription_id: subscription.id,
                         },
-                        automatic_payment_methods: { enabled: true },
                     });
+                    responseData.clientSecret = setupIntent.client_secret;
+                    responseData.isSetup = true;
+                } else {
+                    if (paymentIntent) {
+                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                            automatic_payment_methods: { enabled: true },
+                            metadata: {
+                                invoice_id: latestInvoice.id,
+                                subscription_id: subscription.id,
+                            },
+                        });
+                    }
+                    if (!paymentIntent && latestInvoice.amount_due > 0) {
+                        paymentIntent = await stripe.paymentIntents.create({
+                            amount: latestInvoice.amount_due,
+                            currency: latestInvoice.currency,
+                            customer: customer.id,
+                            metadata: {
+                                invoice_id: latestInvoice.id,
+                                subscription_id: subscription.id,
+                            },
+                            automatic_payment_methods: { enabled: true },
+                        });
+                    }
+                    if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
                 }
 
-                responseData.clientSecret = paymentIntent.client_secret;
                 responseData.subscriptionId = subscription.id;
                 responseData.invoiceId = latestInvoice.id;
                 responseData.type = 'mixed_reverse';
@@ -550,30 +578,42 @@ app.post('/api/create-subscription', async (req, res) => {
                 let latestInvoice = subscription.latest_invoice;
                 paymentIntent = latestInvoice.payment_intent;
 
-                // Update PaymentIntent
-                if (paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                        automatic_payment_methods: { enabled: true },
-                        metadata: {
-                            invoice_id: latestInvoice.id,
-                            subscription_id: subscription.id,
-                        },
-                    });
-                }
-                if (!paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.create({
-                        amount: latestInvoice.amount_due,
-                        currency: latestInvoice.currency,
+                // Handle $0 Invoice
+                if (!paymentIntent && latestInvoice.amount_due === 0) {
+                    const setupIntent = await stripe.setupIntents.create({
                         customer: customer.id,
+                        payment_method_types: ['card', 'link'],
                         metadata: {
-                            invoice_id: latestInvoice.id,
                             subscription_id: subscription.id,
                         },
-                        automatic_payment_methods: { enabled: true },
                     });
+                    responseData.clientSecret = setupIntent.client_secret;
+                    responseData.isSetup = true;
+                } else {
+                    if (paymentIntent) {
+                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                            automatic_payment_methods: { enabled: true },
+                            metadata: {
+                                invoice_id: latestInvoice.id,
+                                subscription_id: subscription.id,
+                            },
+                        });
+                    }
+                    if (!paymentIntent && latestInvoice.amount_due > 0) {
+                        paymentIntent = await stripe.paymentIntents.create({
+                            amount: latestInvoice.amount_due,
+                            currency: latestInvoice.currency,
+                            customer: customer.id,
+                            metadata: {
+                                invoice_id: latestInvoice.id,
+                                subscription_id: subscription.id,
+                            },
+                            automatic_payment_methods: { enabled: true },
+                        });
+                    }
+                    if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
                 }
 
-                responseData.clientSecret = paymentIntent.client_secret;
                 responseData.subscriptionId = subscription.id;
                 responseData.invoiceId = latestInvoice.id;
                 responseData.type = 'recurring';

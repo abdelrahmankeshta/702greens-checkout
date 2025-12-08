@@ -6,7 +6,7 @@ import { Select } from './ui/Select';
 
 import { Check } from 'lucide-react'; // For custom checkbox if needed
 
-export default function CheckoutForm({ billingAddress, setBillingAddress, sameAsShipping, setSameAsShipping, onCapture, onValidate }) {
+export default function CheckoutForm({ billingAddress, setBillingAddress, sameAsShipping, setSameAsShipping, onCapture, onValidate, isSetupMode }) {
     const stripe = useStripe();
     const elements = useElements();
 
@@ -30,12 +30,24 @@ export default function CheckoutForm({ billingAddress, setBillingAddress, sameAs
         setIsProcessing(true);
         setMessage(null);
 
-        const { error } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-                return_url: window.location.origin + '/success',
-            },
-        });
+        let result;
+        if (isSetupMode) {
+            result = await stripe.confirmSetup({
+                elements,
+                confirmParams: {
+                    return_url: window.location.origin + '/success',
+                },
+            });
+        } else {
+            result = await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    return_url: window.location.origin + '/success',
+                },
+            });
+        }
+
+        const { error } = result;
 
         if (error) {
             setMessage(error.message || 'Payment failed');
