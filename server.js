@@ -343,7 +343,7 @@ app.post('/create-subscription', async (req, res) => {
                     // For Subscription scenarios, create a one-time coupon
                     try {
                         const coupon = await stripe.coupons.create({
-                            percent_off: discount.discountValue,
+                            percent_off: parseFloat(discount.discountValue),
                             duration: 'once',
                             name: `Discount ${discount.code}`
                         });
