@@ -331,17 +331,36 @@ app.post('/api/create-subscription', async (req, res) => {
             // But Scenario 3 (Sub Main + One-time Add-on) applies quantity to Add-on.
             // Scenario 1 (One-time Main + Sub Add-on) applies quantity to Main.
             // Let's refine based on scenario logic below, but strictly for percentage calc, 
+            // But Scenario 3 (Sub Main + One-time Add-on) applies quantity to Add-on.
+            // Let's refine based on scenario logic below, but strictly for percentage calc,
             // approximating totalAmount is usually fine if we apply discount to the *invoice* (which naturally handles subtotal).
             // BUT for PaymentIntent (Scenario 2), we MUST know exact amount.
             // For Subscriptions, we add a negative Invoice Item, we MUST know exact amount if fixed/percent.
         }
 
         let discountDeduction = 0;
+        let couponId = null;
+
         if (discount) {
             if (discount.discountMethod === 'fixed') {
                 discountDeduction = discount.discountValue * 100;
             } else if (discount.discountMethod === 'percent') {
-                discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+                if (isOneTime && !hasAddOns) {
+                    // For pure one-time, we calculate deduction manually
+                    discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+                } else {
+                    // For Subscription scenarios, create a one-time coupon
+                    try {
+                        const coupon = await stripe.coupons.create({
+                            percent_off: discount.discountValue,
+                            duration: 'once',
+                            name: `Discount ${discount.code}`
+                        });
+                        couponId = coupon.id;
+                    } catch (e) {
+                        console.error('Failed to create coupon:', e);
+                    }
+                }
             }
         }
 
@@ -384,8 +403,8 @@ app.post('/api/create-subscription', async (req, res) => {
 
         // Apply Discount (if applicable and NOT pure one-time flow)
         // For pure one-time flow (Scenario 2), we minimize the intent amount directly.
-        // For all others (involving Subscription), we use a negative Invoice Item.
-        if (discountDeduction > 0 && !(isOneTime && !hasAddOns)) {
+        // For all others (involving Subscription), we use a negative Invoice Item (unless coupon is used).
+        if (discountDeduction > 0 && !(isOneTime && !hasAddOns) && !couponId) {
             await stripe.invoiceItems.create({
                 customer: customer.id,
                 amount: -discountDeduction,
@@ -411,6 +430,7 @@ app.post('/api/create-subscription', async (req, res) => {
             const subscription = await stripe.subscriptions.create({
                 customer: customer.id,
                 items: subscriptionItems,
+                coupon: couponId,
                 payment_behavior: 'default_incomplete',
                 payment_settings: {
                     save_default_payment_method: 'on_subscription',
@@ -511,6 +531,7 @@ app.post('/api/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
+                    coupon: couponId,
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
@@ -567,6 +588,7 @@ app.post('/api/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
+                    coupon: couponId,
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',

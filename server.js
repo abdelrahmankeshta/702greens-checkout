@@ -330,11 +330,28 @@ app.post('/create-subscription', async (req, res) => {
         }
 
         let discountDeduction = 0;
+        let couponId = null;
+
         if (discount) {
             if (discount.discountMethod === 'fixed') {
                 discountDeduction = discount.discountValue * 100;
             } else if (discount.discountMethod === 'percent') {
-                discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+                if (isOneTime && !hasAddOns) {
+                    // For pure one-time, we calculate deduction manually
+                    discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
+                } else {
+                    // For Subscription scenarios, create a one-time coupon
+                    try {
+                        const coupon = await stripe.coupons.create({
+                            percent_off: discount.discountValue,
+                            duration: 'once',
+                            name: `Discount ${discount.code}`
+                        });
+                        couponId = coupon.id;
+                    } catch (e) {
+                        console.error('Failed to create coupon:', e);
+                    }
+                }
             }
         }
 
@@ -375,7 +392,7 @@ app.post('/create-subscription', async (req, res) => {
         const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
 
         // Apply Discount (if applicable and NOT pure one-time flow)
-        if (discountDeduction > 0 && !(isOneTime && !hasAddOns)) {
+        if (discountDeduction > 0 && !(isOneTime && !hasAddOns) && !couponId) {
             console.log(`[DEBUG] Creating negative invoice item: -${discountDeduction}`);
             await stripe.invoiceItems.create({
                 customer: customer.id,
@@ -384,7 +401,7 @@ app.post('/create-subscription', async (req, res) => {
                 description: `Discount (${discount.code})`
             });
         } else {
-            console.log(`[DEBUG] Skipping invoice item. discountDeduction: ${discountDeduction}, isOneTime: ${isOneTime}, hasAddOns: ${hasAddOns}`);
+            console.log(`[DEBUG] Skipping invoice item. discountDeduction: ${discountDeduction}, isOneTime: ${isOneTime}, hasAddOns: ${hasAddOns}, couponId: ${couponId}`);
         }
 
         if (isOneTime && hasAddOns) {
@@ -404,6 +421,7 @@ app.post('/create-subscription', async (req, res) => {
             const subscription = await stripe.subscriptions.create({
                 customer: customer.id,
                 items: subscriptionItems,
+                coupon: couponId,
                 payment_behavior: 'default_incomplete',
                 payment_settings: {
                     save_default_payment_method: 'on_subscription',
@@ -488,6 +506,7 @@ app.post('/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
+                    coupon: couponId,
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
@@ -532,6 +551,7 @@ app.post('/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
+                    coupon: couponId,
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
