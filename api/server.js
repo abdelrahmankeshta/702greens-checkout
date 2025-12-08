@@ -430,7 +430,7 @@ app.post('/api/create-subscription', async (req, res) => {
             const subscription = await stripe.subscriptions.create({
                 customer: customer.id,
                 items: subscriptionItems,
-                coupon: couponId,
+                ...(couponId && { coupon: couponId }),
                 payment_behavior: 'default_incomplete',
                 payment_settings: {
                     save_default_payment_method: 'on_subscription',
@@ -481,7 +481,6 @@ app.post('/api/create-subscription', async (req, res) => {
                 if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
             }
 
-            responseData.clientSecret = paymentIntent.client_secret;
             responseData.subscriptionId = subscription.id;
             responseData.invoiceId = latestInvoice.id;
             responseData.type = 'mixed';
@@ -531,7 +530,7 @@ app.post('/api/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
-                    coupon: couponId,
+                    ...(couponId && { coupon: couponId }),
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
@@ -588,7 +587,7 @@ app.post('/api/create-subscription', async (req, res) => {
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
-                    coupon: couponId,
+                    ...(couponId && { coupon: couponId }),
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
