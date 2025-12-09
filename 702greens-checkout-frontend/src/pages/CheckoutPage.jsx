@@ -1,15 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, ExpressCheckoutElement } from '@stripe/react-stripe-js';
-import { ChevronDown, ChevronUp, ShoppingBag, Loader2, Tag, Search, HelpCircle } from 'lucide-react';
+import { Elements, ExpressCheckoutElement, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { ChevronDown, ChevronUp, ShoppingBag, Loader2, Tag, Search, HelpCircle, Plus, Minus, X, Info, CreditCard } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import CheckoutForm from '../components/CheckoutForm';
 import { Input } from '../components/ui/Input';
+import { FloatingLabelInput } from '../components/ui/FloatingLabelInput';
 import { Select } from '../components/ui/Select';
 import { Button } from '../components/ui/Button';
-import { FloatingLabelInput } from '../components/ui/FloatingLabelInput';
 
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error("Uncaught error:", error, errorInfo);
+        this.state.error = error;
+        this.state.errorInfo = errorInfo;
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: '2rem', color: 'red' }}>
+                    <h1>Something went wrong.</h1>
+                    <details style={{ whiteSpace: 'pre-wrap' }}>
+                        {this.state.error && this.state.error.toString()}
+                        <br />
+                        {this.state.errorInfo && this.state.errorInfo.componentStack}
+                    </details>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
@@ -26,6 +59,14 @@ const PRODUCT_MAPPING = {
 };
 
 export default function CheckoutPage() {
+    return (
+        <ErrorBoundary>
+            <CheckoutPageContent />
+        </ErrorBoundary>
+    );
+}
+
+function CheckoutPageContent() {
     const location = useLocation();
     const { productSlug } = useParams();
     // Products State
@@ -224,8 +265,9 @@ export default function CheckoutPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to initialize checkout');
 
-            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret);
+            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret, 'isSetup:', data.isSetup);
             setClientSecret(data.clientSecret);
+            setIsSetupMode(data.isSetup === true);
         } catch (err) {
             console.error(err);
             setError(err.message);
@@ -241,11 +283,19 @@ export default function CheckoutPage() {
         }
     }, [selectedPriceId]);
 
-    // Re-initialize when discount is applied/removed
+    // Re-initialize when discount is applied/removed (debounced)
     useEffect(() => {
-        if (selectedPriceId) {
+        if (!selectedPriceId) return;
+
+        // Skip if this is the initial load and we already have a clientSecret
+        if (clientSecret && !appliedDiscount) return;
+
+        // Debounce to avoid rapid re-initialization
+        const timeoutId = setTimeout(() => {
             initializeCheckout();
-        }
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(timeoutId);
     }, [appliedDiscount, oneTimeQuantity]); // Re-init on discount or quantity change
 
     // Re-initialize if critical params change (optional, but careful not to loop)
@@ -1029,20 +1079,7 @@ export default function CheckoutPage() {
                                     paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
                                 }}>
                                     <div style={{ marginBottom: '1.5rem' }}>
-                                        <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
-                                            Express checkout
-                                        </div>
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <ExpressCheckoutElement options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }} />
-                                        </div>
-                                        <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
-                                            By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                            <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
-                                            <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                        </div>
+                                        <ExpressCheckouter isSetupMode={isSetupMode} />
                                     </div>
                                 </Elements>
                             ) : (
@@ -1334,7 +1371,7 @@ export default function CheckoutPage() {
                                         color: 'var(--color-text-muted)',
                                         border: '1px dashed var(--color-border)'
                                     }}>
-                                        {loading ? 'Initializing secure checkout...' : 'Please enter your email to load payment options.'}
+                                        {loading ? 'Initializing secure checkout...' : 'Loading payment options...'}
                                     </div>
                                 )}
                             </section>
@@ -1781,5 +1818,62 @@ export default function CheckoutPage() {
 
 
         </Layout >
+    );
+}
+
+function ExpressCheckouter({ isSetupMode }) {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [errorMessage, setErrorMessage] = useState(null);
+
+    const onConfirm = async (event) => {
+        if (!stripe || !elements) {
+            return;
+        }
+
+        const { error } = isSetupMode
+            ? await stripe.confirmSetup({
+                elements,
+                confirmParams: {
+                    return_url: window.location.origin + '/success',
+                },
+            })
+            : await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    return_url: window.location.origin + '/success',
+                },
+            });
+
+        if (error) {
+            setErrorMessage(error.message);
+        }
+    };
+
+    return (
+        <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
+                Express checkout
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+                <ExpressCheckoutElement
+                    onConfirm={onConfirm}
+                    options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }}
+                />
+            </div>
+            {errorMessage && (
+                <div style={{ padding: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '0.375rem', marginBottom: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+                    {errorMessage}
+                </div>
+            )}
+            <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
+                By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+                <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+            </div>
+        </div>
     );
 }
