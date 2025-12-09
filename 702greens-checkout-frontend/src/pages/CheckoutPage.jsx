@@ -677,7 +677,13 @@ function CheckoutPageContent() {
                             flex: 1 1 100% !important;
                             width: 100% !important;
                             max-width: 100% !important;
-                            padding: 2rem !important;
+                            padding: 1.5rem !important;
+                            justify-content: center !important;
+                        }
+                        .checkout-left > div {
+                            padding-left: 0 !important;
+                            padding-right: 0 !important;
+                            margin: 0 auto !important;
                         }
                         .checkout-right {
                             min-height: auto !important;
