@@ -404,6 +404,7 @@ app.post('/create-subscription', async (req, res) => {
             console.log(`[DEBUG] Skipping invoice item. discountDeduction: ${discountDeduction}, isOneTime: ${isOneTime}, hasAddOns: ${hasAddOns}, couponId: ${couponId}`);
         }
 
+        /* SCENARIO 1 DISABLED
         if (isOneTime && hasAddOns) {
             // Scenario 1: Main = One-time (with Quantity) + Add-ons = Subscription
             console.log('Scenario 1: One-time Main + Subscription Add-ons');
@@ -461,7 +462,7 @@ app.post('/create-subscription', async (req, res) => {
             responseData.invoiceId = latestInvoice.id;
             responseData.type = 'mixed';
 
-        } else if (isOneTime) {
+        } else */ if (isOneTime) {
             // Scenario 2: Main = One-time (with Quantity) - No Add-ons
             console.log('Scenario 2: One-time Main');
 
@@ -489,6 +490,7 @@ app.post('/create-subscription', async (req, res) => {
             // Main = Subscription
             console.log('Main is Subscription');
 
+            /* SCENARIO 3 DISABLED
             if (hasAddOns) {
                 // Scenario 3: Main = Subscription + Add-ons = One-time (with Quantity)
                 console.log('Scenario 3: Subscription Main + One-time Add-ons');
@@ -547,62 +549,63 @@ app.post('/create-subscription', async (req, res) => {
                 responseData.type = 'mixed_reverse';
 
             } else {
-                // Scenario 4: Main = Subscription - No Add-ons
-                const subscription = await stripe.subscriptions.create({
+            */
+            // Scenario 4: Main = Subscription - No Add-ons
+            const subscription = await stripe.subscriptions.create({
+                customer: customer.id,
+                items: [{ price: priceId }],
+                ...(couponId && { coupon: couponId }),
+                payment_behavior: 'default_incomplete',
+                payment_settings: {
+                    save_default_payment_method: 'on_subscription',
+                },
+                expand: ['latest_invoice.payment_intent'],
+            });
+
+            // Get the invoice and payment intent
+            let latestInvoice = subscription.latest_invoice;
+            paymentIntent = latestInvoice.payment_intent;
+
+            // Handle $0 Invoice
+            if (!paymentIntent && latestInvoice.amount_due === 0) {
+                const setupIntent = await stripe.setupIntents.create({
                     customer: customer.id,
-                    items: [{ price: priceId }],
-                    ...(couponId && { coupon: couponId }),
-                    payment_behavior: 'default_incomplete',
-                    payment_settings: {
-                        save_default_payment_method: 'on_subscription',
+                    payment_method_types: ['card', 'link'],
+                    metadata: {
+                        subscription_id: subscription.id,
                     },
-                    expand: ['latest_invoice.payment_intent'],
                 });
-
-                // Get the invoice and payment intent
-                let latestInvoice = subscription.latest_invoice;
-                paymentIntent = latestInvoice.payment_intent;
-
-                // Handle $0 Invoice
-                if (!paymentIntent && latestInvoice.amount_due === 0) {
-                    const setupIntent = await stripe.setupIntents.create({
-                        customer: customer.id,
-                        payment_method_types: ['card', 'link'],
+                responseData.clientSecret = setupIntent.client_secret;
+                responseData.isSetup = true;
+            } else {
+                if (paymentIntent) {
+                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                        automatic_payment_methods: { enabled: true },
                         metadata: {
+                            invoice_id: latestInvoice.id,
                             subscription_id: subscription.id,
                         },
                     });
-                    responseData.clientSecret = setupIntent.client_secret;
-                    responseData.isSetup = true;
-                } else {
-                    if (paymentIntent) {
-                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                            automatic_payment_methods: { enabled: true },
-                            metadata: {
-                                invoice_id: latestInvoice.id,
-                                subscription_id: subscription.id,
-                            },
-                        });
-                    }
-                    if (!paymentIntent && latestInvoice.amount_due > 0) {
-                        paymentIntent = await stripe.paymentIntents.create({
-                            amount: latestInvoice.amount_due,
-                            currency: latestInvoice.currency,
-                            customer: customer.id,
-                            metadata: {
-                                invoice_id: latestInvoice.id,
-                                subscription_id: subscription.id,
-                            },
-                            automatic_payment_methods: { enabled: true },
-                        });
-                    }
-                    if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
                 }
-
-                responseData.subscriptionId = subscription.id;
-                responseData.invoiceId = latestInvoice.id;
-                responseData.type = 'recurring';
+                if (!paymentIntent && latestInvoice.amount_due > 0) {
+                    paymentIntent = await stripe.paymentIntents.create({
+                        amount: latestInvoice.amount_due,
+                        currency: latestInvoice.currency,
+                        customer: customer.id,
+                        metadata: {
+                            invoice_id: latestInvoice.id,
+                            subscription_id: subscription.id,
+                        },
+                        automatic_payment_methods: { enabled: true },
+                    });
+                }
+                if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
             }
+
+            responseData.subscriptionId = subscription.id;
+            responseData.invoiceId = latestInvoice.id;
+            responseData.type = 'recurring';
+            // } /* End Scenario 3 Trigger */
         }
 
         res.json(responseData);
