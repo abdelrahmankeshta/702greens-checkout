@@ -335,7 +335,7 @@ app.post('/create-subscription', async (req, res) => {
         if (discount) {
             if (discount.discountMethod === 'fixed') {
                 discountDeduction = discount.discountValue * 100;
-            } else if (discount.discountMethod === 'percent') {
+            } else if (discount.discountMethod === 'percent' || discount.discountMethod === 'percentage') {
                 if (isOneTime && !hasAddOns) {
                     // For pure one-time, we calculate deduction manually
                     discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
