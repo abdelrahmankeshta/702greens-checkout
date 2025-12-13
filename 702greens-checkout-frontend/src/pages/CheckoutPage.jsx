@@ -1082,25 +1082,64 @@ function CheckoutPageContent() {
                         </div>
 
                         <div>
-                            {/* Express Checkout */}
-                            {clientSecret ? (
-                                <Elements key={`express-${clientSecret}`} stripe={stripePromise} options={{
-                                    clientSecret,
-                                    appearance: {
-                                        theme: 'stripe',
-                                        variables: {
-                                            colorPrimary: '#0f392b',
-                                            colorBackground: '#ffffff',
-                                            colorText: '#0f392b',
-                                            borderRadius: '10px',
-                                        }
-                                    },
-                                    paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
-                                }}>
+                            {/* Express Checkout - Deferred Intent Pattern for instant loading */}
+                            {currentProduct && total > 0 ? (
+                                <Elements
+                                    key={`express-deferred-${total}-${currentProduct.interval}`}
+                                    stripe={stripePromise}
+                                    options={{
+                                        mode: currentProduct.interval === 'one_time' ? 'payment' : 'subscription',
+                                        amount: Math.round(total * 100), // Convert to cents
+                                        currency: 'usd',
+                                        appearance: {
+                                            theme: 'stripe',
+                                            variables: {
+                                                colorPrimary: '#0f392b',
+                                                colorBackground: '#ffffff',
+                                                colorText: '#0f392b',
+                                                borderRadius: '10px',
+                                            }
+                                        },
+                                        paymentMethodOrder: ['apple_pay', 'google_pay', 'link'],
+                                    }}>
                                     <div style={{ marginBottom: '1.5rem' }}>
-                                        <ExpressCheckouter isSetupMode={isSetupMode} stripeCustomerId={stripeCustomerId} />
+                                        <DeferredExpressCheckout
+                                            total={total}
+                                            currentProduct={currentProduct}
+                                            selectedAddOnId={selectedAddOnId}
+                                            selectedPriceId={selectedPriceId}
+                                            email={email}
+                                            delivery={delivery}
+                                            appliedDiscount={appliedDiscount}
+                                            oneTimeQuantity={oneTimeQuantity}
+                                            setStripeCustomerId={setStripeCustomerId}
+                                        />
                                     </div>
                                 </Elements>
+                            ) : total === 0 && currentProduct ? (
+                                // $0 checkout - use regular flow with clientSecret
+                                clientSecret ? (
+                                    <Elements key={`express-${clientSecret}`} stripe={stripePromise} options={{
+                                        clientSecret,
+                                        appearance: {
+                                            theme: 'stripe',
+                                            variables: {
+                                                colorPrimary: '#0f392b',
+                                                colorBackground: '#ffffff',
+                                                colorText: '#0f392b',
+                                                borderRadius: '10px',
+                                            }
+                                        },
+                                    }}>
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <ExpressCheckouter isSetupMode={isSetupMode} stripeCustomerId={stripeCustomerId} />
+                                        </div>
+                                    </Elements>
+                                ) : (
+                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', marginBottom: '1.5rem' }}>
+                                        <Loader2 size={30} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
+                                    </div>
+                                )
                             ) : (
                                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', marginBottom: '1.5rem' }}>
                                     <Loader2 size={30} style={{ animation: 'spin 1s linear infinite', color: '#9ca3af' }} />
@@ -2137,3 +2176,146 @@ function ExpressCheckouter({ isSetupMode, stripeCustomerId }) {
     );
 }
 
+// Deferred Intent Express Checkout - Creates intent on user click for instant display
+function DeferredExpressCheckout({
+    total,
+    currentProduct,
+    selectedAddOnId,
+    selectedPriceId,
+    email,
+    delivery,
+    appliedDiscount,
+    oneTimeQuantity,
+    setStripeCustomerId
+}) {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [errorMessage, setErrorMessage] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const API_URL = import.meta.env.VITE_API_URL || '';
+
+    const onConfirm = async (event) => {
+        if (!stripe || !elements || isProcessing) {
+            return;
+        }
+
+        setIsProcessing(true);
+        setErrorMessage(null);
+
+        // Extract billing details from Express Checkout event
+        const billingDetails = event.billingDetails;
+        console.log('[DEBUG DeferredExpressCheckout] Billing details from event:', billingDetails);
+
+        try {
+            // 1. Create the subscription/payment intent on the server
+            console.log('[DEBUG DeferredExpressCheckout] Creating subscription...');
+            const res = await fetch(`${API_URL}/api/create-subscription`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    priceId: selectedPriceId,
+                    email: billingDetails?.email || email || '',
+                    delivery,
+                    addOnPriceIds: selectedAddOnId ? [selectedAddOnId] : [],
+                    quantity: oneTimeQuantity,
+                    discount: appliedDiscount
+                }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to create payment');
+
+            console.log('[DEBUG DeferredExpressCheckout] Received clientSecret:', data.clientSecret);
+
+            // Store customer ID for webhook logging
+            if (data.customerId && setStripeCustomerId) {
+                setStripeCustomerId(data.customerId);
+            }
+
+            // 2. Update the customer with billing details if we have them
+            if (data.customerId && billingDetails && billingDetails.email) {
+                console.log('[DEBUG DeferredExpressCheckout] Updating customer with billing details...');
+                try {
+                    await fetch(`${API_URL}/api/update-customer`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            customerId: data.customerId,
+                            email: billingDetails.email,
+                            name: billingDetails.name,
+                            phone: billingDetails.phone,
+                            address: billingDetails.address
+                        })
+                    });
+                } catch (err) {
+                    console.error('[DEBUG DeferredExpressCheckout] Error updating customer:', err);
+                }
+            }
+
+            // 3. Submit the elements to collect payment method
+            const { error: submitError } = await elements.submit();
+            if (submitError) {
+                throw new Error(submitError.message);
+            }
+
+            // 4. Confirm the payment/setup
+            const confirmResult = data.isSetup
+                ? await stripe.confirmSetup({
+                    clientSecret: data.clientSecret,
+                    confirmParams: {
+                        return_url: window.location.origin + '/success',
+                    },
+                })
+                : await stripe.confirmPayment({
+                    clientSecret: data.clientSecret,
+                    confirmParams: {
+                        return_url: window.location.origin + '/success',
+                    },
+                });
+
+            if (confirmResult.error) {
+                throw new Error(confirmResult.error.message);
+            }
+
+        } catch (err) {
+            console.error('[DEBUG DeferredExpressCheckout] Error:', err);
+            setErrorMessage(err.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    return (
+        <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem' }}>
+                Express checkout
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+                <ExpressCheckoutElement
+                    onConfirm={onConfirm}
+                    options={{ buttonTheme: { applePay: 'black', googlePay: 'black' }, height: 48 }}
+                />
+            </div>
+            {errorMessage && (
+                <div style={{ padding: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '0.375rem', marginBottom: '1rem', textAlign: 'center', fontSize: '0.875rem' }}>
+                    {errorMessage}
+                </div>
+            )}
+            {isProcessing && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }}>
+                    <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', color: '#0f392b' }} />
+                    <span style={{ marginLeft: '0.5rem', color: '#6b7280' }}>Processing...</span>
+                </div>
+            )}
+            <div style={{ marginBottom: '1.5rem', textAlign: 'center', color: '#6b7280', fontSize: '0.8rem', lineHeight: '1.4' }}>
+                By continuing with your payment, you agree to the future charges listed on this page and the cancellation policy.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+                <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</div>
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }}></div>
+            </div>
+        </div>
+    );
+}
