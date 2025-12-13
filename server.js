@@ -725,6 +725,7 @@ app.post('/create-subscription', async (req, res) => {
             // Get the invoice and payment intent
             let latestInvoice = subscription.latest_invoice;
             paymentIntent = latestInvoice.payment_intent;
+            console.log(`[DEBUG] Invoice amount_due: ${latestInvoice.amount_due} cents, PaymentIntent amount: ${paymentIntent ? paymentIntent.amount : 'N/A'} cents`);
 
             // Handle $0 Invoice
             if (!paymentIntent && latestInvoice.amount_due === 0) {
@@ -776,20 +777,52 @@ app.post('/create-subscription', async (req, res) => {
                 }
 
                 if (paymentIntent) {
-                    // Update the existing PaymentIntent with our metadata only (can't change automatic_payment_methods after creation)
-                    try {
-                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                            metadata: {
-                                invoice_id: latestInvoice.id,
-                                subscription_id: subscription.id,
-                            },
-                        });
-                    } catch (updateErr) {
-                        console.log(`[DEBUG] Could not update PaymentIntent metadata: ${updateErr.message}`);
-                        // Continue anyway - we can still use the PI
+                    // Check if the PaymentIntent amount matches the invoice amount
+                    // When coupons are applied, the PaymentIntent might have the pre-discount amount
+                    if (paymentIntent.amount !== latestInvoice.amount_due) {
+                        console.log(`[DEBUG] PaymentIntent amount (${paymentIntent.amount}) differs from invoice amount_due (${latestInvoice.amount_due}). Updating PI...`);
+                        try {
+                            paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                                amount: latestInvoice.amount_due,
+                                metadata: {
+                                    invoice_id: latestInvoice.id,
+                                    subscription_id: subscription.id,
+                                },
+                            });
+                            console.log(`[DEBUG] PaymentIntent amount updated to ${paymentIntent.amount} cents`);
+                        } catch (updateErr) {
+                            console.log(`[DEBUG] Could not update PaymentIntent amount: ${updateErr.message}`);
+                            // If we can't update, we may need to create a new one
+                            if (updateErr.code === 'payment_intent_unexpected_state' || updateErr.message.includes('cannot be updated')) {
+                                console.log(`[DEBUG] Creating new PaymentIntent with correct discounted amount...`);
+                                paymentIntent = await stripe.paymentIntents.create({
+                                    amount: latestInvoice.amount_due,
+                                    currency: latestInvoice.currency,
+                                    customer: customer.id,
+                                    metadata: {
+                                        invoice_id: latestInvoice.id,
+                                        subscription_id: subscription.id,
+                                    },
+                                    automatic_payment_methods: { enabled: true },
+                                });
+                                console.log(`[DEBUG] New PaymentIntent created: ${paymentIntent.id} with amount ${paymentIntent.amount}`);
+                            }
+                        }
+                    } else {
+                        // Just update metadata if amounts match
+                        try {
+                            paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                                metadata: {
+                                    invoice_id: latestInvoice.id,
+                                    subscription_id: subscription.id,
+                                },
+                            });
+                        } catch (updateErr) {
+                            console.log(`[DEBUG] Could not update PaymentIntent metadata: ${updateErr.message}`);
+                        }
                     }
                     responseData.clientSecret = paymentIntent.client_secret;
-                    console.log(`[DEBUG] Returning clientSecret for PI: ${paymentIntent.id}`);
+                    console.log(`[DEBUG] Returning clientSecret for PI: ${paymentIntent.id}, amount: ${paymentIntent.amount} cents`);
                 } else {
                     console.error('[ERROR] Could not obtain PaymentIntent for subscription invoice');
                     throw new Error('Failed to create payment intent for subscription. Please try again.');
