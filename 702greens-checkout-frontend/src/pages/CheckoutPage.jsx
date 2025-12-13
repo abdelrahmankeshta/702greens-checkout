@@ -195,7 +195,6 @@ function CheckoutPageContent() {
                 if (!res.ok) throw new Error('Failed to fetch products');
                 const data = await res.json();
                 setProducts(data);
-                setProducts(data);
 
                 // Handle Product Selection via URL Slug or Default
                 if (productSlug && PRODUCT_MAPPING[productSlug]) {
@@ -251,7 +250,6 @@ function CheckoutPageContent() {
             // Clear the old clientSecret FIRST to force Express Checkout to unmount
             // This ensures a fresh Elements instance with the correct amount when discount is applied
             setClientSecret('');
-            console.log('[DEBUG Frontend] Initializing checkout. Discount:', appliedDiscount, 'OneTimeQty:', oneTimeQuantity);
 
             const res = await fetch(`${API_URL}/create-subscription`, {
                 method: 'POST',
@@ -269,7 +267,6 @@ function CheckoutPageContent() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to initialize checkout');
 
-            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret, 'isSetup:', data.isSetup, 'customerId:', data.customerId);
             setClientSecret(data.clientSecret);
             setIsSetupMode(data.isSetup === true);
             if (data.customerId) {
@@ -446,11 +443,19 @@ function CheckoutPageContent() {
         }
     };
 
-    // Google Maps Autocomplete
+    // Google Maps Autocomplete - Deferred Loading
     const addressInputRef = useRef(null);
     const autocompleteRef = useRef(null);
+    const [mapsLoaded, setMapsLoaded] = useState(false);
+
+    const loadGoogleMapsOnFocus = useCallback(() => {
+        if (mapsLoaded) return;
+        setMapsLoaded(true);
+    }, [mapsLoaded]);
 
     useEffect(() => {
+        if (!mapsLoaded) return; // Don't load until user focuses address field
+
         const loadGoogleMapsScript = () => {
             if (window.google && window.google.maps) {
                 initAutocomplete();
@@ -458,7 +463,6 @@ function CheckoutPageContent() {
             }
 
             if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
-                // Script already loading/loaded, wait for it
                 const checkGoogle = setInterval(() => {
                     if (window.google && window.google.maps) {
                         clearInterval(checkGoogle);
@@ -481,7 +485,7 @@ function CheckoutPageContent() {
 
             autocompleteRef.current = new window.google.maps.places.Autocomplete(addressInputRef.current, {
                 types: ['address'],
-                componentRestrictions: { country: 'us' }, // Restrict to US for now as per country state
+                componentRestrictions: { country: 'us' },
                 fields: ['address_components', 'formatted_address'],
             });
 
@@ -533,14 +537,13 @@ function CheckoutPageContent() {
                     zip: zip,
                     country: country || 'US'
                 };
-                // Trigger capture with new data immediately
                 triggerCapture(updated);
                 return updated;
             });
         };
 
         loadGoogleMapsScript();
-    }, []);
+    }, [mapsLoaded]);
 
     // Validation State
     const [errors, setErrors] = useState({});
@@ -1203,6 +1206,7 @@ function CheckoutPageContent() {
                                     placeholder="Address"
                                     value={delivery.address}
                                     onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
+                                    onFocus={loadGoogleMapsOnFocus}
                                     onBlur={() => handleBlur('address', delivery.address, 'address')}
                                     error={errors.address}
                                     rightIcon={<Search size={18} />}
@@ -2104,12 +2108,10 @@ function ExpressCheckouter({ isSetupMode, stripeCustomerId }) {
         // Extract billing details from Express Checkout event
         // These are provided by Apple Pay, Google Pay, etc.
         const billingDetails = event.billingDetails;
-        console.log('[DEBUG ExpressCheckout] Billing details from event:', billingDetails);
 
         // If we have a customer ID and billing details, update the customer first
         // This is critical for $0 payments where the customer was created as a "guest"
         if (stripeCustomerId && billingDetails && billingDetails.email) {
-            console.log('[DEBUG ExpressCheckout] Updating customer with billing details...');
             try {
                 await fetch(`${API_URL}/api/update-customer`, {
                     method: 'POST',
@@ -2122,7 +2124,6 @@ function ExpressCheckouter({ isSetupMode, stripeCustomerId }) {
                         address: billingDetails.address
                     })
                 });
-                console.log('[DEBUG ExpressCheckout] Customer updated successfully');
             } catch (err) {
                 console.error('[DEBUG ExpressCheckout] Error updating customer:', err);
                 // Continue anyway - don't block payment
@@ -2205,11 +2206,9 @@ function DeferredExpressCheckout({
 
         // Extract billing details from Express Checkout event
         const billingDetails = event.billingDetails;
-        console.log('[DEBUG DeferredExpressCheckout] Billing details from event:', billingDetails);
 
         try {
             // 1. Create the subscription/payment intent on the server
-            console.log('[DEBUG DeferredExpressCheckout] Creating subscription...');
             const res = await fetch(`${API_URL}/api/create-subscription`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2226,8 +2225,6 @@ function DeferredExpressCheckout({
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to create payment');
 
-            console.log('[DEBUG DeferredExpressCheckout] Received clientSecret:', data.clientSecret);
-
             // Store customer ID for webhook logging
             if (data.customerId && setStripeCustomerId) {
                 setStripeCustomerId(data.customerId);
@@ -2235,7 +2232,6 @@ function DeferredExpressCheckout({
 
             // 2. Update the customer with billing details if we have them
             if (data.customerId && billingDetails && billingDetails.email) {
-                console.log('[DEBUG DeferredExpressCheckout] Updating customer with billing details...');
                 try {
                     await fetch(`${API_URL}/api/update-customer`, {
                         method: 'POST',
@@ -2249,7 +2245,7 @@ function DeferredExpressCheckout({
                         })
                     });
                 } catch (err) {
-                    console.error('[DEBUG DeferredExpressCheckout] Error updating customer:', err);
+                    // Silently continue - don't block payment
                 }
             }
 
