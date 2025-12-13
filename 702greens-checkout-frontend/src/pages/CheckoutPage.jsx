@@ -247,6 +247,9 @@ function CheckoutPageContent() {
         try {
             setLoading(true);
             setError(null);
+            // Clear the old clientSecret FIRST to force Express Checkout to unmount
+            // This ensures a fresh Elements instance with the correct amount when discount is applied
+            setClientSecret('');
             console.log('[DEBUG Frontend] Initializing checkout. Discount:', appliedDiscount, 'OneTimeQty:', oneTimeQuantity);
 
             const res = await fetch(`${API_URL}/create-subscription`, {
