@@ -856,8 +856,8 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    const logFile = require('path').join(__dirname, 'webhook-debug.log');
-    require('fs').appendFileSync(logFile, `${formatIsoDate(Date.now() / 1000)} - Received event: ${event.type}\n`);
+    // Use console.log instead of file logging (Vercel has read-only filesystem)
+    console.log(`[WEBHOOK] Received event: ${event.type}`);
 
     // Handle the event
     try {
@@ -883,8 +883,8 @@ async function handlePaymentEvent(event) {
         return;
     }
 
-    const logFile = require('path').join(__dirname, 'payment-debug.log');
-    const log = (msg) => require('fs').appendFileSync(logFile, `${formatIsoDate(Date.now() / 1000)} - ${msg}\n`);
+    // Use console.log instead of file logging (Vercel has read-only filesystem)
+    const log = (msg) => console.log(`[PAYMENT] ${msg}`);
 
     log(`Processing event: ${eventType}`);
 
@@ -3098,8 +3098,8 @@ app.post('/api/capture-lead', async (req, res) => {
 
 async function createOrder(orderData) {
     try {
-        const logFile = require('path').join(__dirname, 'payment-debug.log');
-        const log = (msg) => require('fs').appendFileSync(logFile, `${new Date().toISOString()} - [createOrder] ${msg}\n`);
+        // Use console.log instead of file logging (Vercel has read-only filesystem)
+        const log = (msg) => console.log(`[createOrder] ${msg}`);
 
         log(`Starting order creation for Customer: ${orderData.customerId}, Type: ${orderData.orderType}`);
 
@@ -3138,17 +3138,15 @@ async function createOrder(orderData) {
         log(`Successfully appended Order ${orderId} to sheet.`);
         return orderId;
     } catch (e) {
-        console.error('Error creating order:', e);
-        const logFile = require('path').join(__dirname, 'payment-debug.log');
-        require('fs').appendFileSync(logFile, `${new Date().toISOString()} - [createOrder] ERROR: ${e.message}\n`);
+        console.error('[createOrder] ERROR:', e.message);
         return null;
     }
 }
 
 async function createOrderLineItems(orderId, items) {
     try {
-        const logFile = require('path').join(__dirname, 'payment-debug.log');
-        const log = (msg) => require('fs').appendFileSync(logFile, `${new Date().toISOString()} - [createOrderLineItems] ${msg}\n`);
+        // Use console.log instead of file logging (Vercel has read-only filesystem)
+        const log = (msg) => console.log(`[createOrderLineItems] ${msg}`);
 
         log(`Starting line item creation for Order ${orderId}. Items count: ${items.length}`);
 
@@ -3185,8 +3183,6 @@ async function createOrderLineItems(orderId, items) {
         console.log(`Created ${items.length} line items for Order ${orderId}`);
         log(`Successfully created ${items.length} line items for Order ${orderId}`);
     } catch (e) {
-        console.error('Error creating line items:', e);
-        const logFile = require('path').join(__dirname, 'payment-debug.log');
-        require('fs').appendFileSync(logFile, `${new Date().toISOString()} - [createOrderLineItems] ERROR: ${e.message}\n`);
+        console.error('[createOrderLineItems] ERROR:', e.message);
     }
 }
