@@ -47,12 +47,12 @@ app.get('/products', async (req, res) => {
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
         // Whitelist of allowed Price IDs (TESTING MODE)
-        const ALLOWED_PRICE_IDS = [
+        const ALLOWED_PRICE_IDS = new Set([
             'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
             'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
             'price_1SX659CFLmsUiqyIl8cIM77T', // Double Nutrition Mix
             'price_1SX655CFLmsUiqyIVMOAdbxd', // Single Nutrition Mix
-        ];
+        ]);
 
         // Fetch recurring subscription products
         const recurringPrices = await stripe.prices.list({
@@ -70,7 +70,7 @@ app.get('/products', async (req, res) => {
 
         // Combine both types and filter for allowed Price IDs only
         const allPrices = [...recurringPrices.data, ...oneTimePrices.data];
-        const filteredPrices = allPrices.filter(price => ALLOWED_PRICE_IDS.includes(price.id));
+        const filteredPrices = allPrices.filter(price => ALLOWED_PRICE_IDS.has(price.id));
 
         // Fetch Plans from Sheet to get correct interval counts
         const sheetPlans = await getPlans();
