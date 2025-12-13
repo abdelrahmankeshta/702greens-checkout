@@ -878,7 +878,8 @@ async function handlePaymentEvent(event) {
     const data = event.data.object;
 
     // We only care about specific events
-    if (!['payment_intent.succeeded', 'invoice.payment_succeeded', 'charge.refunded', 'invoice.payment_failed'].includes(eventType)) {
+    // Added 'setup_intent.succeeded' for $0 subscriptions that use SetupIntent instead of PaymentIntent
+    if (!['payment_intent.succeeded', 'invoice.payment_succeeded', 'charge.refunded', 'invoice.payment_failed', 'setup_intent.succeeded'].includes(eventType)) {
         return;
     }
 
@@ -1000,6 +1001,37 @@ async function handlePaymentEvent(event) {
         stripeCustomerId = data.customer;
         stripeChargeId = data.id;
         metadata = data.metadata || {};
+
+    } else if (eventType === 'setup_intent.succeeded') {
+        // Handle $0 subscriptions that use SetupIntent instead of PaymentIntent
+        console.log('[DEBUG] Processing setup_intent.succeeded for $0 subscription');
+        amount = 0;
+        currency = 'usd';
+        status = 'Succeeded';
+        type = 'Setup';
+
+        // SetupIntent has customer in it
+        stripeCustomerId = data.customer;
+        metadata = data.metadata || {};
+
+        // Get subscription ID from SetupIntent metadata (we set this in create-subscription)
+        stripeSubscriptionId = metadata.subscription_id || '';
+
+        // If we have a subscription ID, fetch the subscription and force-log it
+        if (stripeSubscriptionId) {
+            console.log(`[DEBUG] SetupIntent succeeded for subscription: ${stripeSubscriptionId}`);
+            try {
+                const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+                const mockEvent = {
+                    type: 'customer.subscription.updated',
+                    data: { object: sub }
+                };
+                await handleSubscriptionEvent(mockEvent, true); // Force log
+                console.log(`[DEBUG] Force-logged subscription ${stripeSubscriptionId} from SetupIntent`);
+            } catch (err) {
+                console.error(`[DEBUG] Error force-logging subscription: ${err.message}`);
+            }
+        }
     }
 
     // Fetch additional details

@@ -9,20 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// --- Price Cache for faster checkout ---
-const priceCache = new Map();
-const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function getCachedPrice(priceId) {
-    const cached = priceCache.get(priceId);
-    if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL) {
-        return cached.data;
-    }
-    const price = await stripe.prices.retrieve(priceId);
-    priceCache.set(priceId, { data: price, timestamp: Date.now() });
-    return price;
-}
-
 const app = express();
 const PORT = process.env.PORT || 4242;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -47,12 +33,12 @@ app.get('/api/products', async (req, res) => {
     try {
         // Whitelist of allowed Price IDs (LIVE MODE)
         // Whitelist of allowed Price IDs (TESTING MODE)
-        const ALLOWED_PRICE_IDS = new Set([
+        const ALLOWED_PRICE_IDS = [
             'price_1SX65ECFLmsUiqyI2JaMIb12', // Single Nutrition Mix - One Off
             'price_1SX65BCFLmsUiqyIbFXwFSgi', // Single Nutrition Mix - Bi-Weekly
             'price_1SX659CFLmsUiqyIl8cIM77T', // Double Nutrition Mix
             'price_1SX655CFLmsUiqyIVMOAdbxd', // Single Nutrition Mix
-        ]);
+        ];
 
         // Fetch recurring subscription products
         const recurringPrices = await stripe.prices.list({
@@ -70,7 +56,7 @@ app.get('/api/products', async (req, res) => {
 
         // Combine both types and filter for allowed Price IDs only
         const allPrices = [...recurringPrices.data, ...oneTimePrices.data];
-        const filteredPrices = allPrices.filter(price => ALLOWED_PRICE_IDS.has(price.id));
+        const filteredPrices = allPrices.filter(price => ALLOWED_PRICE_IDS.includes(price.id));
 
         // Fetch Plans from Sheet to get correct interval counts
         const sheetPlans = await getPlans();
@@ -234,12 +220,11 @@ app.post('/api/validate-discount', async (req, res) => {
         }
 
         // Check minimum order value
-        console.log(`[DEBUG] Min order check: orderTotal=${orderTotal}, minOrderValue=${discount.minOrderValue}`);
-        if (discount.minOrderValue > 0) {
-            if (!orderTotal || orderTotal < discount.minOrderValue) {
+        if (orderTotal && discount.minOrderValue > 0) {
+            if (orderTotal < discount.minOrderValue) {
                 return res.json({
                     valid: false,
-                    error: `Minimum order of $${discount.minOrderValue} required for this code`
+                    error: `Minimum order value of $${discount.minOrderValue} required`
                 });
             }
         }
@@ -322,94 +307,6 @@ app.get('/api/check-email', async (req, res) => {
     }
 });
 
-// Update customer with billing details (called after Express Checkout)
-app.post('/api/update-customer', async (req, res) => {
-    try {
-        const { customerId, email, name, phone, address } = req.body;
-
-        if (!customerId) {
-            return res.status(400).json({ error: 'customerId is required' });
-        }
-
-        const updateData = {};
-        if (email) updateData.email = email;
-        if (name) updateData.name = name;
-        if (phone) updateData.phone = phone;
-        if (address) {
-            updateData.address = {
-                line1: address.line1 || address.address,
-                line2: address.line2 || address.apartment || '',
-                city: address.city,
-                state: address.state,
-                postal_code: address.postal_code || address.zip,
-                country: address.country || 'US',
-            };
-        }
-
-        const customer = await stripe.customers.update(customerId, updateData);
-        console.log(`[DEBUG] Updated customer ${customerId} with billing details`);
-
-        res.json({ success: true, customer: { id: customer.id, email: customer.email, name: customer.name } });
-    } catch (err) {
-        console.error('Error updating customer:', err);
-        res.status(500).json({ error: 'Failed to update customer' });
-    }
-});
-
-// Test endpoint for Delivery Details logging
-app.get('/api/test-delivery-details', async (req, res) => {
-    try {
-        console.log('[TEST] Testing logToDeliveryDetails...');
-        await logToDeliveryDetails({
-            stripeCustomerId: 'cus_TEST123',
-            firstName: 'Test',
-            lastName: 'User',
-            zipCode: '89101',
-            productName: 'Test Product',
-            orderType: 'one_time',
-            deliveriesPerCycle: 1,
-            billingIntervalUnit: 'week',
-            billingIntervalCount: 1,
-            lastBillDate: new Date(),
-            nextBillDate: null,
-            isPaid: true,
-            subscriptionStatus: 'active',
-            deliveryDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)
-        });
-        res.json({ success: true, message: 'Check the Delivery Details sheet!' });
-    } catch (err) {
-        console.error('[TEST] Error:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Debug endpoint to list sheets
-app.get('/api/debug-sheets', async (req, res) => {
-    try {
-        const { google } = require('googleapis');
-        const auth = new google.auth.GoogleAuth({
-            keyFile: './credentials.json',
-            scopes: ['https://www.googleapis.com/auth/spreadsheets']
-        });
-        const sheets = google.sheets({ version: 'v4', auth });
-
-        const spreadsheetId = '1VXi95hYwsj0kUDbwgt66DnUnSv1sfUfKMax6CBWjZss';
-        const metadata = await sheets.spreadsheets.get({ spreadsheetId });
-
-        const sheetList = metadata.data.sheets.map(s => ({
-            title: s.properties.title,
-            sheetId: s.properties.sheetId,
-            index: s.properties.index,
-            hidden: s.properties.hidden || false
-        }));
-
-        res.json({ spreadsheetId, sheets: sheetList });
-    } catch (err) {
-        console.error('[DEBUG] Error:', err);
-        res.status(500).json({ error: err.message, stack: err.stack });
-    }
-});
-
 app.post('/api/create-subscription', async (req, res) => {
     try {
         const { priceId, email, delivery, addOnPriceIds, quantity = 1, discount } = req.body;
@@ -417,22 +314,28 @@ app.post('/api/create-subscription', async (req, res) => {
         if (!priceId) {
             return res.status(400).json({ error: 'priceId is required' });
         }
-        // Removed strict email check to support Express Checkout initialization on page load
 
-        // Fetch the price using cache for speed
-        const price = await getCachedPrice(priceId);
+        // Fetch the price to determine if it's one-time or recurring
+        const price = await stripe.prices.retrieve(priceId);
         const isOneTime = price.type === 'one_time';
-
-        // Check if we have add-ons (moved earlier so it's available for discount logic)
-        const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
 
         // Calculate Total Amount (for discount calculation)
         let totalAmount = price.unit_amount * (isOneTime ? parseInt(quantity, 10) : 1);
 
-        // Fetch Add-ons if present (using cache for speed)
-        if (hasAddOns) {
-            const addOnPrices = await Promise.all(addOnPriceIds.map(id => getCachedPrice(id)));
+        // Fetch Add-ons if present to verify total
+        if (addOnPriceIds && addOnPriceIds.length > 0) {
+            const addOnPrices = await Promise.all(addOnPriceIds.map(id => stripe.prices.retrieve(id)));
             totalAmount += addOnPrices.reduce((sum, p) => sum + p.unit_amount * (isOneTime ? 1 : parseInt(quantity, 10)), 0);
+            // Note: Logic above assumes quantity applies to add-ons if mixed? 
+            // Logic in Scenario 1/3 uses quantity for the one-time part.
+            // But Scenario 3 (Sub Main + One-time Add-on) applies quantity to Add-on.
+            // Scenario 1 (One-time Main + Sub Add-on) applies quantity to Main.
+            // Let's refine based on scenario logic below, but strictly for percentage calc, 
+            // But Scenario 3 (Sub Main + One-time Add-on) applies quantity to Add-on.
+            // Let's refine based on scenario logic below, but strictly for percentage calc,
+            // approximating totalAmount is usually fine if we apply discount to the *invoice* (which naturally handles subtotal).
+            // BUT for PaymentIntent (Scenario 2), we MUST know exact amount.
+            // For Subscriptions, we add a negative Invoice Item, we MUST know exact amount if fixed/percent.
         }
 
         let discountDeduction = 0;
@@ -444,6 +347,7 @@ app.post('/api/create-subscription', async (req, res) => {
 
             const isFixedDiscount = discount.discountMethod === 'fixed' || discount.discountMethod === 'fixed_amount';
             const isPercentDiscount = discount.discountMethod === 'percent' || discount.discountMethod === 'percentage';
+            const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
 
             if (isFixedDiscount) {
                 // Fixed amount discount
@@ -493,76 +397,46 @@ app.post('/api/create-subscription', async (req, res) => {
             }
         }
 
-        // 1) Find existing customer or create new one
-        let customer;
-
+        // 1) Create the customer with full details
+        // 1) Create the customer with full details or as guest
+        const customerData = {};
         if (email) {
-            // Try to find existing customer by email
-            const existingCustomers = await stripe.customers.list({
-                email: email,
-                limit: 1
-            });
-
-            if (existingCustomers.data.length > 0) {
-                // Reuse existing customer
-                customer = existingCustomers.data[0];
-                console.log(`[DEBUG] Found existing Stripe customer: ${customer.id}`);
-
-                // Update with latest delivery info if provided
-                if (delivery && delivery.firstName) {
-                    await stripe.customers.update(customer.id, {
-                        name: `${delivery.firstName} ${delivery.lastName}`.trim(),
-                        phone: delivery.phone || customer.phone,
-                        address: {
-                            line1: delivery.address,
-                            line2: delivery.apartment,
-                            city: delivery.city,
-                            state: delivery.state,
-                            postal_code: delivery.zip,
-                            country: delivery.country || 'US',
-                        }
-                    });
-                }
-            } else {
-                // Create new customer with email
-                const customerData = { email };
-                if (delivery) {
-                    customerData.name = `${delivery.firstName} ${delivery.lastName}`.trim();
-                    customerData.phone = delivery.phone;
-                    customerData.address = {
-                        line1: delivery.address,
-                        line2: delivery.apartment,
-                        city: delivery.city,
-                        state: delivery.state,
-                        postal_code: delivery.zip,
-                        country: delivery.country || 'US',
-                    };
-                    customerData.metadata = {
-                        sms_opt_in: delivery.smsOptIn ? 'true' : 'false',
-                        company: delivery.company || '',
-                    };
-                }
-                customer = await stripe.customers.create(customerData);
-                console.log(`[DEBUG] Created new Stripe customer: ${customer.id}`);
-            }
+            customerData.email = email;
         } else {
-            // No email yet - create placeholder for Express Checkout
-            customer = await stripe.customers.create({
-                description: 'Guest Customer (Initialized for Express Checkout)'
-            });
-            console.log(`[DEBUG] Created guest customer for Express Checkout: ${customer.id}`);
+            customerData.description = 'Guest Customer (Initialized for Express Checkout)';
         }
+
+        if (delivery) {
+            customerData.name = `${delivery.firstName} ${delivery.lastName}`.trim();
+            customerData.phone = delivery.phone;
+            customerData.address = {
+                line1: delivery.address,
+                line2: delivery.apartment,
+                city: delivery.city,
+                state: delivery.state,
+                postal_code: delivery.zip,
+                country: delivery.country || 'US',
+            };
+            // Store opt-in preferences in metadata
+            customerData.metadata = {
+                sms_opt_in: delivery.smsOptIn ? 'true' : 'false',
+                company: delivery.company || '',
+            };
+        }
+
+        const customer = await stripe.customers.create(customerData);
 
         let paymentIntent;
         let responseData = {
             customerId: customer.id,
         };
 
+        // Check if we have add-ons
+        const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
+
         // NOTE: Discount for subscriptions is now applied via couponId on the subscription itself
         // The old negative invoice item approach is removed as it was unreliable
-        console.log(`[DEBUG] Discount summary: discountDeduction=${discountDeduction}, couponId=${couponId}, isOneTime=${isOneTime}, hasAddOns=${hasAddOns}`);
 
-        /* SCENARIO 1 DISABLED
         if (isOneTime && hasAddOns) {
             // Scenario 1: Main = One-time (with Quantity) + Add-ons = Subscription
             console.log('Scenario 1: One-time Main + Subscription Add-ons');
@@ -592,41 +466,55 @@ app.post('/api/create-subscription', async (req, res) => {
             let latestInvoice = subscription.latest_invoice;
             paymentIntent = latestInvoice.payment_intent;
 
-            // Update PaymentIntent metadata
-            if (paymentIntent) {
-                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                    automatic_payment_methods: { enabled: true },
-                    metadata: {
-                        invoice_id: latestInvoice.id,
-                        subscription_id: subscription.id,
-                    },
-                });
-            }
-            if (!paymentIntent) {
-                paymentIntent = await stripe.paymentIntents.create({
-                    amount: latestInvoice.amount_due,
-                    currency: latestInvoice.currency,
+            // Handle $0 Invoice (Discounted to Free)
+            if (!paymentIntent && latestInvoice.amount_due === 0) {
+                const setupIntent = await stripe.setupIntents.create({
                     customer: customer.id,
+                    payment_method_types: ['card', 'link'],
                     metadata: {
-                        invoice_id: latestInvoice.id,
                         subscription_id: subscription.id,
                     },
-                    automatic_payment_methods: { enabled: true },
                 });
+                responseData.clientSecret = setupIntent.client_secret;
+                responseData.isSetup = true;
+            } else {
+                if (paymentIntent) {
+                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                        automatic_payment_methods: { enabled: true },
+                        metadata: {
+                            invoice_id: latestInvoice.id,
+                            subscription_id: subscription.id,
+                        },
+                    });
+                }
+                // If not zero AND no intent (should not happen for default_incomplete), we might need to create one,
+                // but default_incomplete guarantees an intent unless amount is 0.
+                // Keeping fallback just in case:
+                if (!paymentIntent && latestInvoice.amount_due > 0) {
+                    paymentIntent = await stripe.paymentIntents.create({
+                        amount: latestInvoice.amount_due,
+                        currency: latestInvoice.currency,
+                        customer: customer.id,
+                        metadata: {
+                            invoice_id: latestInvoice.id,
+                            subscription_id: subscription.id,
+                        },
+                        automatic_payment_methods: { enabled: true },
+                    });
+                }
+                if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
             }
 
-            responseData.clientSecret = paymentIntent.client_secret;
             responseData.subscriptionId = subscription.id;
             responseData.invoiceId = latestInvoice.id;
             responseData.type = 'mixed';
 
-        } else */ if (isOneTime) {
+        } else if (isOneTime) {
             // Scenario 2: Main = One-time (with Quantity) - No Add-ons
             console.log('Scenario 2: One-time Main');
 
             const originalAmount = price.unit_amount * parseInt(quantity, 10);
-            const finalAmount = Math.max(50, originalAmount - discountDeduction);
-            console.log(`[DEBUG] One-time payment: original=${originalAmount}, discount=${discountDeduction}, final=${finalAmount}`);
+            const finalAmount = Math.max(50, originalAmount - discountDeduction); // Standard Stripe minimum is usually 50 cents
 
             paymentIntent = await stripe.paymentIntents.create({
                 amount: finalAmount,
@@ -649,7 +537,6 @@ app.post('/api/create-subscription', async (req, res) => {
             // Main = Subscription
             console.log('Main is Subscription');
 
-            /* SCENARIO 3 DISABLED
             if (hasAddOns) {
                 // Scenario 3: Main = Subscription + Add-ons = One-time (with Quantity)
                 console.log('Scenario 3: Subscription Main + One-time Add-ons');
@@ -679,89 +566,28 @@ app.post('/api/create-subscription', async (req, res) => {
                 let latestInvoice = subscription.latest_invoice;
                 paymentIntent = latestInvoice.payment_intent;
 
-                // Update PaymentIntent
-                if (paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                        automatic_payment_methods: { enabled: true },
-                        metadata: {
-                            invoice_id: latestInvoice.id,
-                            subscription_id: subscription.id,
-                        },
-                    });
-                }
-                if (!paymentIntent) {
-                    paymentIntent = await stripe.paymentIntents.create({
-                        amount: latestInvoice.amount_due,
-                        currency: latestInvoice.currency,
+                // Handle $0 Invoice
+                if (!paymentIntent && latestInvoice.amount_due === 0) {
+                    const setupIntent = await stripe.setupIntents.create({
                         customer: customer.id,
+                        payment_method_types: ['card', 'link'],
                         metadata: {
-                            invoice_id: latestInvoice.id,
                             subscription_id: subscription.id,
                         },
-                        automatic_payment_methods: { enabled: true },
                     });
-                }
-
-                responseData.clientSecret = paymentIntent.client_secret;
-                responseData.subscriptionId = subscription.id;
-                responseData.invoiceId = latestInvoice.id;
-                responseData.type = 'mixed_reverse';
-
-            } else {
-            */
-            // Scenario 4: Main = Subscription - No Add-ons
-            console.log(`[DEBUG] Creating subscription with couponId: ${couponId}`);
-            const subscription = await stripe.subscriptions.create({
-                customer: customer.id,
-                items: [{ price: priceId }],
-                ...(couponId && { discounts: [{ coupon: couponId }] }),
-                payment_behavior: 'default_incomplete',
-                payment_settings: {
-                    save_default_payment_method: 'on_subscription',
-                },
-                expand: ['latest_invoice.payment_intent'],
-            });
-
-            // Get the invoice and payment intent
-            let latestInvoice = subscription.latest_invoice;
-            paymentIntent = latestInvoice.payment_intent;
-            console.log(`[DEBUG] Invoice amount_due: ${latestInvoice.amount_due} cents, PaymentIntent amount: ${paymentIntent ? paymentIntent.amount : 'N/A'} cents`);
-
-            // Handle $0 Invoice
-            if (!paymentIntent && latestInvoice.amount_due === 0) {
-                const setupIntent = await stripe.setupIntents.create({
-                    customer: customer.id,
-                    automatic_payment_methods: { enabled: true },
-                    metadata: {
-                        subscription_id: subscription.id,
-                    },
-                });
-                responseData.clientSecret = setupIntent.client_secret;
-                responseData.isSetup = true;
-            } else {
-                // If the invoice doesn't have a PaymentIntent, we need to finalize it first
-                // This happens when:
-                // 1. Discounts/coupons are applied during subscription creation
-                // 2. The invoice was created but not finalized with a PI
-                if (!paymentIntent && latestInvoice.amount_due > 0) {
-                    console.log(`[DEBUG] Invoice ${latestInvoice.id} has no PaymentIntent. Checking invoice status: ${latestInvoice.status}`);
-
-                    // If the invoice is still a draft, finalize it
-                    if (latestInvoice.status === 'draft') {
-                        latestInvoice = await stripe.invoices.finalizeInvoice(latestInvoice.id);
-                        console.log(`[DEBUG] Invoice finalized. Status: ${latestInvoice.status}`);
+                    responseData.clientSecret = setupIntent.client_secret;
+                    responseData.isSetup = true;
+                } else {
+                    if (paymentIntent) {
+                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                            automatic_payment_methods: { enabled: true },
+                            metadata: {
+                                invoice_id: latestInvoice.id,
+                                subscription_id: subscription.id,
+                            },
+                        });
                     }
-
-                    // Now retrieve the invoice again to get the PaymentIntent
-                    const refreshedInvoice = await stripe.invoices.retrieve(latestInvoice.id, {
-                        expand: ['payment_intent']
-                    });
-                    paymentIntent = refreshedInvoice.payment_intent;
-                    console.log(`[DEBUG] Retrieved PaymentIntent from invoice: ${paymentIntent ? paymentIntent.id : 'null'}`);
-
-                    // FALLBACK: If still no PaymentIntent, create a standalone one
-                    if (!paymentIntent) {
-                        console.log(`[DEBUG] Creating fallback PaymentIntent for amount: ${latestInvoice.amount_due}`);
+                    if (!paymentIntent && latestInvoice.amount_due > 0) {
                         paymentIntent = await stripe.paymentIntents.create({
                             amount: latestInvoice.amount_due,
                             currency: latestInvoice.currency,
@@ -772,72 +598,139 @@ app.post('/api/create-subscription', async (req, res) => {
                             },
                             automatic_payment_methods: { enabled: true },
                         });
-                        console.log(`[DEBUG] Fallback PaymentIntent created: ${paymentIntent.id}`);
                     }
+                    if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
                 }
 
-                if (paymentIntent) {
-                    // Check if the PaymentIntent amount matches the invoice amount
-                    // When coupons are applied, the PaymentIntent might have the pre-discount amount
-                    if (paymentIntent.amount !== latestInvoice.amount_due) {
-                        console.log(`[DEBUG] PaymentIntent amount (${paymentIntent.amount}) differs from invoice amount_due (${latestInvoice.amount_due}). Updating PI...`);
-                        try {
-                            paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                responseData.subscriptionId = subscription.id;
+                responseData.invoiceId = latestInvoice.id;
+                responseData.type = 'mixed_reverse';
+
+            } else {
+                // Scenario 4: Main = Subscription - No Add-ons
+                console.log(`[DEBUG] Creating subscription with couponId: ${couponId}`);
+                const subscription = await stripe.subscriptions.create({
+                    customer: customer.id,
+                    items: [{ price: priceId }],
+                    ...(couponId && { discounts: [{ coupon: couponId }] }),
+                    payment_behavior: 'default_incomplete',
+                    payment_settings: {
+                        save_default_payment_method: 'on_subscription',
+                    },
+                    expand: ['latest_invoice.payment_intent'],
+                });
+
+                // Get the invoice and payment intent
+                let latestInvoice = subscription.latest_invoice;
+                paymentIntent = latestInvoice.payment_intent;
+                console.log(`[DEBUG] Invoice amount_due: ${latestInvoice.amount_due} cents, PaymentIntent amount: ${paymentIntent ? paymentIntent.amount : 'N/A'} cents`);
+
+                // Handle $0 Invoice
+                if (!paymentIntent && latestInvoice.amount_due === 0) {
+                    const setupIntent = await stripe.setupIntents.create({
+                        customer: customer.id,
+                        automatic_payment_methods: { enabled: true },
+                        metadata: {
+                            subscription_id: subscription.id,
+                        },
+                    });
+                    responseData.clientSecret = setupIntent.client_secret;
+                    responseData.isSetup = true;
+                } else {
+                    // If the invoice doesn't have a PaymentIntent, we need to finalize it first
+                    if (!paymentIntent && latestInvoice.amount_due > 0) {
+                        console.log(`[DEBUG] Invoice ${latestInvoice.id} has no PaymentIntent. Checking invoice status: ${latestInvoice.status}`);
+
+                        if (latestInvoice.status === 'draft') {
+                            latestInvoice = await stripe.invoices.finalizeInvoice(latestInvoice.id);
+                            console.log(`[DEBUG] Invoice finalized. Status: ${latestInvoice.status}`);
+                        }
+
+                        const refreshedInvoice = await stripe.invoices.retrieve(latestInvoice.id, {
+                            expand: ['payment_intent']
+                        });
+                        paymentIntent = refreshedInvoice.payment_intent;
+                        console.log(`[DEBUG] Retrieved PaymentIntent from invoice: ${paymentIntent ? paymentIntent.id : 'null'}`);
+
+                        if (!paymentIntent) {
+                            console.log(`[DEBUG] Creating fallback PaymentIntent for amount: ${latestInvoice.amount_due}`);
+                            paymentIntent = await stripe.paymentIntents.create({
                                 amount: latestInvoice.amount_due,
+                                currency: latestInvoice.currency,
+                                customer: customer.id,
                                 metadata: {
                                     invoice_id: latestInvoice.id,
                                     subscription_id: subscription.id,
                                 },
+                                automatic_payment_methods: { enabled: true },
                             });
-                            console.log(`[DEBUG] PaymentIntent amount updated to ${paymentIntent.amount} cents`);
-                        } catch (updateErr) {
-                            console.log(`[DEBUG] Could not update PaymentIntent amount: ${updateErr.message}`);
-                            // If we can't update, we may need to create a new one
-                            if (updateErr.code === 'payment_intent_unexpected_state' || updateErr.message.includes('cannot be updated')) {
-                                console.log(`[DEBUG] Creating new PaymentIntent with correct discounted amount...`);
-                                paymentIntent = await stripe.paymentIntents.create({
+                            console.log(`[DEBUG] Fallback PaymentIntent created: ${paymentIntent.id}`);
+                        }
+                    }
+
+                    if (paymentIntent) {
+                        // Check if the PaymentIntent amount matches the invoice amount
+                        // When coupons are applied, the PaymentIntent might have the pre-discount amount
+                        if (paymentIntent.amount !== latestInvoice.amount_due) {
+                            console.log(`[DEBUG] PaymentIntent amount (${paymentIntent.amount}) differs from invoice amount_due (${latestInvoice.amount_due}). Updating PI...`);
+                            try {
+                                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
                                     amount: latestInvoice.amount_due,
-                                    currency: latestInvoice.currency,
-                                    customer: customer.id,
                                     metadata: {
                                         invoice_id: latestInvoice.id,
                                         subscription_id: subscription.id,
                                     },
-                                    automatic_payment_methods: { enabled: true },
                                 });
-                                console.log(`[DEBUG] New PaymentIntent created: ${paymentIntent.id} with amount ${paymentIntent.amount}`);
+                                console.log(`[DEBUG] PaymentIntent amount updated to ${paymentIntent.amount} cents`);
+                            } catch (updateErr) {
+                                console.log(`[DEBUG] Could not update PaymentIntent amount: ${updateErr.message}`);
+                                // If we can't update, create a new one
+                                if (updateErr.message.includes('cannot be updated') || updateErr.code === 'payment_intent_unexpected_state') {
+                                    console.log(`[DEBUG] Creating new PaymentIntent with correct discounted amount...`);
+                                    paymentIntent = await stripe.paymentIntents.create({
+                                        amount: latestInvoice.amount_due,
+                                        currency: latestInvoice.currency,
+                                        customer: customer.id,
+                                        metadata: {
+                                            invoice_id: latestInvoice.id,
+                                            subscription_id: subscription.id,
+                                        },
+                                        automatic_payment_methods: { enabled: true },
+                                    });
+                                    console.log(`[DEBUG] New PaymentIntent created: ${paymentIntent.id} with amount ${paymentIntent.amount}`);
+                                }
+                            }
+                        } else {
+                            // Just update metadata if amounts match
+                            try {
+                                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                                    metadata: {
+                                        invoice_id: latestInvoice.id,
+                                        subscription_id: subscription.id,
+                                    },
+                                });
+                            } catch (updateErr) {
+                                console.log(`[DEBUG] Could not update PaymentIntent metadata: ${updateErr.message}`);
                             }
                         }
+                        responseData.clientSecret = paymentIntent.client_secret;
+                        console.log(`[DEBUG] Returning clientSecret for PI: ${paymentIntent.id}, amount: ${paymentIntent.amount} cents`);
                     } else {
-                        // Just update metadata if amounts match
-                        try {
-                            paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                                metadata: {
-                                    invoice_id: latestInvoice.id,
-                                    subscription_id: subscription.id,
-                                },
-                            });
-                        } catch (updateErr) {
-                            console.log(`[DEBUG] Could not update PaymentIntent metadata: ${updateErr.message}`);
-                        }
+                        console.error('[ERROR] Could not obtain PaymentIntent for subscription invoice');
+                        throw new Error('Failed to create payment intent for subscription. Please try again.');
                     }
-                    responseData.clientSecret = paymentIntent.client_secret;
-                    console.log(`[DEBUG] Returning clientSecret for PI: ${paymentIntent.id}, amount: ${paymentIntent.amount} cents`);
-                } else {
-                    console.error('[ERROR] Could not obtain PaymentIntent for subscription invoice');
-                    throw new Error('Failed to create payment intent for subscription. Please try again.');
                 }
-            }
 
-            responseData.subscriptionId = subscription.id;
-            responseData.invoiceId = latestInvoice.id;
-            responseData.type = 'recurring';
+                responseData.subscriptionId = subscription.id;
+                responseData.invoiceId = latestInvoice.id;
+                responseData.type = 'recurring';
+            }
         }
 
         res.json(responseData);
     } catch (err) {
         console.error('Error creating subscription:', err);
-        res.status(500).json({ error: err.message || 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -878,8 +771,7 @@ async function handlePaymentEvent(event) {
     const data = event.data.object;
 
     // We only care about specific events
-    // Added 'setup_intent.succeeded' for $0 subscriptions that use SetupIntent instead of PaymentIntent
-    if (!['payment_intent.succeeded', 'invoice.payment_succeeded', 'charge.refunded', 'invoice.payment_failed', 'setup_intent.succeeded'].includes(eventType)) {
+    if (!['payment_intent.succeeded', 'invoice.payment_succeeded', 'charge.refunded', 'invoice.payment_failed'].includes(eventType)) {
         return;
     }
 
@@ -932,44 +824,6 @@ async function handlePaymentEvent(event) {
             }
         }
 
-        // 3. Update guest customer with billing details from PaymentIntent
-        // Note: Webhook payload doesn't include expanded charges, so we need to fetch them
-        if (stripeCustomerId) {
-            try {
-                const customer = await stripe.customers.retrieve(stripeCustomerId);
-                // Only update if it's a guest customer
-                if (customer.description && customer.description.includes('Guest Customer')) {
-                    // Fetch the PaymentIntent with charges expanded
-                    const pi = await stripe.paymentIntents.retrieve(data.id, {
-                        expand: ['latest_charge']
-                    });
-
-                    const billingDetails = pi.latest_charge?.billing_details || {};
-                    log(`[DEBUG] Billing details from charge: ${JSON.stringify(billingDetails)}`);
-
-                    const updateData = {};
-                    if (billingDetails.email) updateData.email = billingDetails.email;
-                    if (billingDetails.name) updateData.name = billingDetails.name;
-                    if (billingDetails.phone) updateData.phone = billingDetails.phone;
-                    if (billingDetails.address && billingDetails.address.line1) {
-                        updateData.address = billingDetails.address;
-                    }
-                    // Clear the guest description
-                    updateData.description = null;
-
-                    if (Object.keys(updateData).length > 1) {
-                        await stripe.customers.update(stripeCustomerId, updateData);
-                        log(`Updated guest customer ${stripeCustomerId} with billing details: email=${billingDetails.email}, name=${billingDetails.name}`);
-                        if (billingDetails.email) email = billingDetails.email;
-                    } else {
-                        log(`[DEBUG] No billing details to update for guest customer`);
-                    }
-                }
-            } catch (updateErr) {
-                log(`Error updating guest customer: ${updateErr.message}`);
-            }
-        }
-
     } else if (eventType === 'invoice.payment_succeeded') {
         amount = data.amount_paid / 100;
         currency = data.currency;
@@ -1001,37 +855,6 @@ async function handlePaymentEvent(event) {
         stripeCustomerId = data.customer;
         stripeChargeId = data.id;
         metadata = data.metadata || {};
-
-    } else if (eventType === 'setup_intent.succeeded') {
-        // Handle $0 subscriptions that use SetupIntent instead of PaymentIntent
-        console.log('[DEBUG] Processing setup_intent.succeeded for $0 subscription');
-        amount = 0;
-        currency = 'usd';
-        status = 'Succeeded';
-        type = 'Setup';
-
-        // SetupIntent has customer in it
-        stripeCustomerId = data.customer;
-        metadata = data.metadata || {};
-
-        // Get subscription ID from SetupIntent metadata (we set this in create-subscription)
-        stripeSubscriptionId = metadata.subscription_id || '';
-
-        // If we have a subscription ID, fetch the subscription and force-log it
-        if (stripeSubscriptionId) {
-            console.log(`[DEBUG] SetupIntent succeeded for subscription: ${stripeSubscriptionId}`);
-            try {
-                const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-                const mockEvent = {
-                    type: 'customer.subscription.updated',
-                    data: { object: sub }
-                };
-                await handleSubscriptionEvent(mockEvent, true); // Force log
-                console.log(`[DEBUG] Force-logged subscription ${stripeSubscriptionId} from SetupIntent`);
-            } catch (err) {
-                console.error(`[DEBUG] Error force-logging subscription: ${err.message}`);
-            }
-        }
     }
 
     // Fetch additional details
@@ -1150,46 +973,6 @@ async function handlePaymentEvent(event) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 success = await updateStatus();
                 if (!success) log('Retry failed.');
-            }
-
-            // CHECK STRIPE SUBSCRIPTION STATUS
-            // With the fixed subscription creation, the PaymentIntent should be linked to the invoice
-            // When the PI is paid, the invoice/subscription should auto-activate
-            try {
-                const stripeSubStatus = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-                log(`Stripe subscription ${stripeSubscriptionId} status: ${stripeSubStatus.status}`);
-
-                if (stripeSubStatus.status === 'active') {
-                    log(`Subscription is now active in Stripe!`);
-                } else if (stripeSubStatus.status === 'incomplete') {
-                    // Subscription is incomplete - we need to mark the invoice as paid
-                    // since we collected payment via a standalone PaymentIntent
-                    log(`Subscription incomplete. Attempting to pay invoice out-of-band...`);
-                    const invoiceId = stripeSubStatus.latest_invoice;
-
-                    if (invoiceId) {
-                        try {
-                            const invoice = await stripe.invoices.retrieve(invoiceId);
-                            log(`Invoice ${invoiceId} status: ${invoice.status}`);
-
-                            if (invoice.status === 'open') {
-                                // Mark the invoice as paid out of band (payment already collected)
-                                const paidInvoice = await stripe.invoices.pay(invoiceId, {
-                                    paid_out_of_band: true
-                                });
-                                log(`Invoice marked as paid! Status: ${paidInvoice.status}`);
-                            } else if (invoice.status === 'paid') {
-                                log(`Invoice already paid.`);
-                            } else {
-                                log(`Invoice in status: ${invoice.status}`);
-                            }
-                        } catch (invoiceErr) {
-                            log(`Error paying invoice: ${invoiceErr.message}`);
-                        }
-                    }
-                }
-            } catch (stripeErr) {
-                log(`Error checking Stripe subscription: ${stripeErr.message}`);
             }
         }
     }
@@ -1562,94 +1345,6 @@ async function handlePaymentEvent(event) {
                 await logToSpokeSheet(customerId, shippingAddressId, lineItems, `Order: ${orderId}`);
             }
 
-            // === Log to Delivery Details (Old Database) ===
-            try {
-                // Get customer info from Stripe
-                let customerFirstName = '';
-                let customerLastName = '';
-                let customerZipCode = '';
-
-                if (stripeCustomerId) {
-                    const stripeCustomer = await stripe.customers.retrieve(stripeCustomerId);
-                    const fullName = stripeCustomer.name || '';
-                    const nameParts = fullName.split(' ');
-                    customerFirstName = nameParts[0] || '';
-                    customerLastName = nameParts.slice(1).join(' ') || '';
-
-                    if (stripeCustomer.address) {
-                        customerZipCode = stripeCustomer.address.postal_code || '';
-                    }
-                }
-
-                // Get product name from first line item
-                const productName = lineItems.length > 0 ? lineItems[0].name : 'Unknown Product';
-
-                // Determine order type for Delivery Details
-                const isSubscription = orderType.includes('Subscription');
-
-                // Get subscription info if available
-                let deliveriesPerCycle = 1;
-                let billingIntervalUnit = 'week';
-                let billingIntervalCount = 1;
-                let nextBillDate = null;
-                let subStatus = 'active';
-
-                if (stripeSubscriptionId) {
-                    try {
-                        const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-                        subStatus = stripeSub.status;
-
-                        if (stripeSub.items && stripeSub.items.data.length > 0) {
-                            const plan = stripeSub.items.data[0].price;
-                            if (plan.recurring) {
-                                billingIntervalUnit = plan.recurring.interval;
-                                billingIntervalCount = plan.recurring.interval_count;
-                            }
-                        }
-
-                        // Get deliveries per cycle from Plans sheet
-                        const plans = await getPlans();
-                        const matchedPlan = plans.find(p =>
-                            p.intervalUnit === billingIntervalUnit &&
-                            p.intervalCount === billingIntervalCount
-                        );
-                        if (matchedPlan) {
-                            deliveriesPerCycle = matchedPlan.deliveriesPerCycle;
-                        }
-
-                        // Calculate next bill date
-                        if (stripeSub.current_period_end) {
-                            nextBillDate = new Date(stripeSub.current_period_end * 1000);
-                        }
-                    } catch (subErr) {
-                        console.log(`[DEBUG] Error fetching subscription for Delivery Details: ${subErr.message}`);
-                    }
-                }
-
-                // Calculate delivery date (4 days from order)
-                const deliveryDate = new Date((orderDate + 4 * 24 * 60 * 60) * 1000);
-
-                await logToDeliveryDetails({
-                    stripeCustomerId,
-                    firstName: customerFirstName,
-                    lastName: customerLastName,
-                    zipCode: customerZipCode,
-                    productName,
-                    orderType: isSubscription ? 'subscription' : 'one_time',
-                    deliveriesPerCycle,
-                    billingIntervalUnit,
-                    billingIntervalCount,
-                    lastBillDate: new Date(orderDate * 1000),
-                    nextBillDate,
-                    isPaid: true,
-                    subscriptionStatus: subStatus,
-                    deliveryDate
-                });
-
-                console.log(`[DEBUG] Logged to Delivery Details for ${stripeCustomerId}`);
-            } catch (ddErr) {
-                console.error('[DEBUG] Error logging to Delivery Details:', ddErr.message);
-            }
 
 
         } catch (err) {
@@ -1951,9 +1646,8 @@ async function findSubscriptionByStripeId(stripeSubId) {
 }
 
 // 3) Start server
-app.listen(PORT, () => {
-    console.log(`✅ 702Greens subscription server running on port ${PORT} `);
-});
+// Export the app for Vercel Serverless Functions
+module.exports = app;
 
 // --- Google Sheets Integration ---
 const { google } = require('googleapis');
@@ -1961,7 +1655,6 @@ const { google } = require('googleapis');
 
 // Load credentials
 const SPREADSHEET_ID = '1ij_i-W-6cLBQnL_X3d9htwy0-rlRQWT4RcT8gq8FCo0';
-const OLD_SPREADSHEET_ID = '1VXi95hYwsj0kUDbwgt66DnUnSv1sfUfKMax6CBWjZss'; // Old database for Delivery Details
 
 let authConfig = {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
@@ -1974,7 +1667,7 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
         console.error('Error parsing GOOGLE_SERVICE_ACCOUNT_KEY:', e);
     }
 } else {
-    authConfig.keyFile = path.join(__dirname, 'credentials.json');
+    authConfig.keyFile = path.join(__dirname, '..', 'credentials.json');
 }
 
 const auth = new google.auth.GoogleAuth(authConfig);
@@ -2224,8 +1917,6 @@ async function getDiscountCodes() {
     }
 }
 
-
-
 // --- Zip Zone Lookup Helper ---
 let zipZonesCache = null;
 let lastZipZonesFetch = 0;
@@ -2265,307 +1956,6 @@ async function getZipZones() {
     }
 }
 
-// --- Delivery Details Sheet (Old Database) Integration ---
-/**
- * Logs order to the "Delivery Details" sheet in the old database.
- * @param {Object} params - Order parameters
- * @param {string} params.stripeCustomerId - Stripe customer ID (cus_XXX)
- * @param {string} params.firstName - Customer first name
- * @param {string} params.lastName - Customer last name
- * @param {string} params.zipCode - Customer zip code for zone lookup
- * @param {string} params.productName - Product purchased
- * @param {string} params.orderType - 'subscription' or 'one_time'
- * @param {number} params.deliveriesPerCycle - Number of deliveries per billing cycle
- * @param {string} params.billingIntervalUnit - 'week', 'month', 'day', etc.
- * @param {number} params.billingIntervalCount - Billing interval count
- * @param {Date} params.lastBillDate - Date of last payment
- * @param {Date} params.nextBillDate - Date of next payment (null for one-time)
- * @param {boolean} params.isPaid - Whether payment was successful
- * @param {string} params.subscriptionStatus - 'active', 'incomplete', 'canceled', etc.
- * @param {Date} params.deliveryDate - Delivery date to mark
- */
-async function logToDeliveryDetails(params) {
-    const {
-        stripeCustomerId,
-        firstName,
-        lastName,
-        zipCode,
-        productName,
-        orderType,
-        deliveriesPerCycle = 1,
-        billingIntervalUnit = 'week',
-        billingIntervalCount = 1,
-        lastBillDate,
-        nextBillDate,
-        isPaid = true,
-        subscriptionStatus = 'active',
-        deliveryDate
-    } = params;
-
-    console.log(`[logToDeliveryDetails] Logging for customer ${stripeCustomerId}, product: ${productName}`);
-
-    try {
-        // === Step 1: Determine Freq value ===
-        let freq = 'O'; // Default to one-time
-        if (orderType === 'subscription') {
-            // Map deliveriesPerCycle to Freq dropdown
-            // W = 4 deliveries per cycle (weekly deliveries in a 4-week billing cycle)
-            // Bi-W = 2 deliveries per cycle (bi-weekly)
-            // M = 1 delivery per cycle (monthly)
-            if (deliveriesPerCycle >= 4) {
-                freq = 'W'; // Weekly deliveries
-            } else if (deliveriesPerCycle === 2) {
-                freq = 'Bi-W'; // Bi-Weekly deliveries
-            } else if (deliveriesPerCycle === 1) {
-                freq = 'M'; // Monthly delivery
-            } else {
-                freq = 'W'; // Default to weekly
-            }
-        }
-
-        // === Step 2: Get Zone from Zip Code ===
-        let zone = '';
-        if (zipCode) {
-            const zipZones = await getZipZones();
-            const zoningInfo = zipZones.get(zipCode.toString().trim()) || {};
-            zone = zoningInfo.zone || '';
-        }
-
-        // === Step 3: Determine Status ===
-        let status = 'Active';
-        if (!isPaid) {
-            status = 'Pending';
-        } else if (subscriptionStatus === 'canceled' || subscriptionStatus === 'cancelled') {
-            status = 'Finished';
-        } else if (subscriptionStatus === 'incomplete') {
-            status = 'Pending';
-        }
-
-        // === Step 4: Format dates ===
-        const formatSheetDate = (date) => {
-            if (!date) return '';
-            const d = new Date(date);
-            return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear().toString().slice(-2)}`;
-        };
-
-        const lastBill = formatSheetDate(lastBillDate);
-        const nextBill = formatSheetDate(nextBillDate);
-
-        // === Step 5: Build Bill Frequency text ===
-        let billFrequency = '';
-        if (orderType === 'one_time') {
-            billFrequency = 'One-Time';
-        } else {
-            if (billingIntervalUnit === 'week') {
-                billFrequency = billingIntervalCount === 1 ? 'Weekly' : `Every ${billingIntervalCount} weeks`;
-            } else if (billingIntervalUnit === 'month') {
-                billFrequency = billingIntervalCount === 1 ? 'Monthly' : `Every ${billingIntervalCount} months`;
-            } else {
-                billFrequency = `Every ${billingIntervalCount} ${billingIntervalUnit}`;
-            }
-        }
-
-        // === Step 6: Read existing sheet data ===
-        const res = await sheets.spreadsheets.values.get({
-            spreadsheetId: OLD_SPREADSHEET_ID,
-            range: 'Delivery Details!A:Q', // Read columns A through Q (up to Source)
-        });
-        const rows = res.data.values || [];
-
-        if (rows.length === 0) {
-            console.error('[logToDeliveryDetails] Sheet has no data');
-            return;
-        }
-
-        // === Step 7: Find existing customer row or last customer row ===
-        let existingRowIndex = -1;
-        let lastCustomerRowIndex = 0; // Header is row 0
-
-        console.log(`[logToDeliveryDetails] Sheet has ${rows.length} rows`);
-
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            const cellA = (row[0] || '').toString().trim();
-
-            // Skip empty rows
-            if (!cellA) continue;
-
-            // Check if this is the totals section (stop looking)
-            if (cellA.toLowerCase().includes('total') || cellA === '-') {
-                console.log(`[logToDeliveryDetails] Found totals section at row ${i + 1}`);
-                break;
-            }
-
-            // This row has a customer ID (could be phone number or Stripe ID)
-            lastCustomerRowIndex = i;
-
-            // Check if this is our customer (by Stripe ID)
-            if (cellA === stripeCustomerId) {
-                existingRowIndex = i;
-                console.log(`[logToDeliveryDetails] Found existing customer at row ${i + 1}`);
-            }
-        }
-
-        console.log(`[logToDeliveryDetails] Last customer row: ${lastCustomerRowIndex + 1}, Will insert at: ${lastCustomerRowIndex + 2}`);
-
-        // === Step 8: Prepare row data ===
-        // Columns: A=ID, B=First, C=Last, D=Freq, E=Zone, F=Payment, G=Status, H=Appstle Status,
-        //          I-L=skipped (Shopify Status, Zip Code, Day, Notes)
-        //          M=Prod, N=Last Bill, O=Next Bill, P=Bill Frequency, Q=Source
-        const rowData = [
-            stripeCustomerId,           // A: ID
-            firstName || '',            // B: First
-            lastName || '',             // C: Last
-            freq,                       // D: Freq
-            zone,                       // E: Zone
-            isPaid ? '' : 'UNPAID',     // F: Payment (text for now, format later)
-            status,                     // G: Status
-            '',                         // H: Appstle Status (empty)
-            '',                         // I: (skipped)
-            '',                         // J: (skipped)
-            '',                         // K: (skipped)
-            '',                         // L: (skipped)
-            productName || '',          // M: Prod
-            lastBill,                   // N: Last Bill
-            nextBill,                   // O: Next Bill
-            billFrequency,              // P: Bill Frequency
-            'Stripe'                    // Q: Source
-        ];
-
-        // === Step 9: Update or Insert row ===
-        const sheetRowNumber = existingRowIndex !== -1
-            ? existingRowIndex + 1  // Update existing (1-indexed)
-            : lastCustomerRowIndex + 2; // Insert after last customer (1-indexed, +1 for header, +1 for next row)
-
-        if (existingRowIndex !== -1) {
-            // Update existing customer row
-            console.log(`[logToDeliveryDetails] Updating existing customer at row ${sheetRowNumber}`);
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                range: `Delivery Details!A${sheetRowNumber}:Q${sheetRowNumber}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: {
-                    values: [rowData]
-                }
-            });
-        } else {
-            // Insert new row before totals
-            console.log(`[logToDeliveryDetails] Inserting new customer at row ${sheetRowNumber}`);
-
-            // First, insert a blank row to push totals down
-            await sheets.spreadsheets.batchUpdate({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                requestBody: {
-                    requests: [{
-                        insertDimension: {
-                            range: {
-                                sheetId: 0, // Delivery Details (sheetId is unique ID, not index)
-                                dimension: 'ROWS',
-                                startIndex: sheetRowNumber - 1, // 0-indexed
-                                endIndex: sheetRowNumber
-                            },
-                            inheritFromBefore: true
-                        }
-                    }]
-                }
-            });
-
-            // Then update the new row with data
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                range: `Delivery Details!A${sheetRowNumber}:Q${sheetRowNumber}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: {
-                    values: [rowData]
-                }
-            });
-        }
-
-        // === Step 10: Set red background for unpaid ===
-        if (!isPaid) {
-            await sheets.spreadsheets.batchUpdate({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                requestBody: {
-                    requests: [{
-                        repeatCell: {
-                            range: {
-                                sheetId: 0, // Delivery Details
-                                startRowIndex: sheetRowNumber - 1, // 0-indexed
-                                endRowIndex: sheetRowNumber,
-                                startColumnIndex: 5, // Column F (Payment)
-                                endColumnIndex: 6
-                            },
-                            cell: {
-                                userEnteredFormat: {
-                                    backgroundColor: { red: 1, green: 0.8, blue: 0.8 }
-                                }
-                            },
-                            fields: 'userEnteredFormat.backgroundColor'
-                        }
-                    }]
-                }
-            });
-        }
-
-        // === Step 11: Handle delivery date column ===
-        if (deliveryDate) {
-            const deliveryDateStr = formatSheetDate(deliveryDate);
-
-            // Get header row to find date column
-            const headerRes = await sheets.spreadsheets.values.get({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                range: 'Delivery Details!1:1',
-            });
-            const headers = headerRes.data.values ? headerRes.data.values[0] : [];
-
-            // Find column with matching date or add new one
-            let dateColumnIndex = headers.findIndex(h => h === deliveryDateStr);
-
-            if (dateColumnIndex === -1) {
-                // Add new date column after last header
-                dateColumnIndex = headers.length;
-                console.log(`[logToDeliveryDetails] Adding new date column at index ${dateColumnIndex}: ${deliveryDateStr}`);
-
-                // Add header
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: OLD_SPREADSHEET_ID,
-                    range: `Delivery Details!${columnToLetter(dateColumnIndex)}1`,
-                    valueInputOption: 'USER_ENTERED',
-                    requestBody: {
-                        values: [[deliveryDateStr]]
-                    }
-                });
-            }
-
-            // Mark delivery in the date column (1NM for now)
-            console.log(`[logToDeliveryDetails] Marking delivery at row ${sheetRowNumber}, column ${dateColumnIndex}`);
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: OLD_SPREADSHEET_ID,
-                range: `Delivery Details!${columnToLetter(dateColumnIndex)}${sheetRowNumber}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: {
-                    values: [['1NM']]
-                }
-            });
-        }
-
-        console.log(`[logToDeliveryDetails] Successfully logged order for ${stripeCustomerId}`);
-
-    } catch (error) {
-        console.error('[logToDeliveryDetails] Error:', error);
-    }
-}
-
-// Helper: Convert column index to letter (0 = A, 1 = B, 26 = AA, etc.)
-function columnToLetter(columnIndex) {
-    let letter = '';
-    let temp = columnIndex;
-    while (temp >= 0) {
-        letter = String.fromCharCode((temp % 26) + 65) + letter;
-        temp = Math.floor(temp / 26) - 1;
-    }
-    return letter;
-}
 
 async function findInternalPlanId(stripeProduct, stripePrice) {
     if (!stripeProduct || !stripePrice) return null;
@@ -2726,22 +2116,14 @@ async function createDeliveries(orderData) {
         let dayLetter = '';
         let day = '';
         if (shippingAddressId) {
-            console.log(`[createDeliveries] Fetching address ${shippingAddressId} for zoning...`);
             const address = await findAddressById(shippingAddressId);
             if (address && address.zip) {
-                console.log(`[createDeliveries] Found zip: ${address.zip}`);
                 const zipZones = await getZipZones();
                 const zoningInfo = zipZones.get(address.zip.toString().trim()) || {};
-                console.log(`[createDeliveries] Zoning info for ${address.zip}:`, zoningInfo);
-
                 zone = zoningInfo.zone || '';
                 dayLetter = zoningInfo.dayLetter || '';
                 day = zoningInfo.day || '';
-            } else {
-                console.log(`[createDeliveries] Address not found or no zip for ${shippingAddressId}`);
             }
-        } else {
-            console.log(`[createDeliveries] No shippingAddressId provided.`);
         }
 
         for (let i = 0; i < numberOfDeliveries; i++) {
@@ -2855,7 +2237,7 @@ async function handleAddress(customerId, addressData, type, existingCustomer) {
     if (!existingAddress) {
         // Create New
         addressId = await getNextId('Addresses', 'ADDR');
-        // Lookup Zone
+        // Lookup Zone and Destructure
         const zipZones = await getZipZones();
         const zoningInfo = zipZones.get(zip || '') || {};
         const zone = zoningInfo.zone || '';
