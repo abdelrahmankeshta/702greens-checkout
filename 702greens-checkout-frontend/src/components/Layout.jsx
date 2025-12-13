@@ -29,6 +29,8 @@ export default function Layout({ children }) {
                         <img
                             src="/logo-full-color.png"
                             alt="702Greens"
+                            width="180"
+                            height="60"
                             style={{
                                 height: '60px',
                                 width: 'auto',

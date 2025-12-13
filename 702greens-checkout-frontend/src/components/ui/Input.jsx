@@ -19,17 +19,18 @@ export const Input = forwardRef(({ label, error, rightIcon, onFocus, onBlur, ...
             <div style={{ position: 'relative' }}>
                 <input
                     ref={ref}
+                    aria-label={props['aria-label'] || label || props.placeholder}
                     style={{
                         width: '100%',
                         padding: '0.75rem',
                         paddingRight: rightIcon ? '2.5rem' : '0.75rem',
                         borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${error ? '#ef4444' : isFocused ? '#0f392b' : '#e5e7eb'}`, // State-based border
+                        border: `1px solid ${error ? '#ef4444' : isFocused ? '#0f392b' : '#e5e7eb'}`,
                         fontSize: '1rem',
                         outline: 'none',
                         transition: 'border-color 0.2s, box-shadow 0.2s',
                         backgroundColor: 'var(--color-bg-input)',
-                        boxShadow: error ? 'none' : isFocused ? '0 0 0 1px #0f392b' : 'none' // State-based shadow
+                        boxShadow: error ? 'none' : isFocused ? '0 0 0 1px #0f392b' : 'none'
                     }}
                     onFocus={(e) => {
                         setIsFocused(true);
