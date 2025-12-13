@@ -111,6 +111,7 @@ function CheckoutPageContent() {
     // Payment State
     const [clientSecret, setClientSecret] = useState(''); // Changed from null
     const [isSetupMode, setIsSetupMode] = useState(false);
+    const [stripeCustomerId, setStripeCustomerId] = useState(''); // Store Stripe customer ID for Express Checkout updates
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [showSummaryMobile, setShowSummaryMobile] = useState(false);
@@ -268,9 +269,12 @@ function CheckoutPageContent() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to initialize checkout');
 
-            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret, 'isSetup:', data.isSetup);
+            console.log('[DEBUG Frontend] Received new clientSecret:', data.clientSecret, 'isSetup:', data.isSetup, 'customerId:', data.customerId);
             setClientSecret(data.clientSecret);
             setIsSetupMode(data.isSetup === true);
+            if (data.customerId) {
+                setStripeCustomerId(data.customerId);
+            }
         } catch (err) {
             console.error(err);
             setError(err.message);
@@ -1094,7 +1098,7 @@ function CheckoutPageContent() {
                                     paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'affirm', 'afterpay_clearpay'],
                                 }}>
                                     <div style={{ marginBottom: '1.5rem' }}>
-                                        <ExpressCheckouter isSetupMode={isSetupMode} />
+                                        <ExpressCheckouter isSetupMode={isSetupMode} stripeCustomerId={stripeCustomerId} />
                                     </div>
                                 </Elements>
                             ) : (
@@ -2046,14 +2050,44 @@ function CheckoutPageContent() {
     );
 }
 
-function ExpressCheckouter({ isSetupMode }) {
+function ExpressCheckouter({ isSetupMode, stripeCustomerId }) {
     const stripe = useStripe();
     const elements = useElements();
     const [errorMessage, setErrorMessage] = useState(null);
 
+    const API_URL = import.meta.env.VITE_API_URL || '';
+
     const onConfirm = async (event) => {
         if (!stripe || !elements) {
             return;
+        }
+
+        // Extract billing details from Express Checkout event
+        // These are provided by Apple Pay, Google Pay, etc.
+        const billingDetails = event.billingDetails;
+        console.log('[DEBUG ExpressCheckout] Billing details from event:', billingDetails);
+
+        // If we have a customer ID and billing details, update the customer first
+        // This is critical for $0 payments where the customer was created as a "guest"
+        if (stripeCustomerId && billingDetails && billingDetails.email) {
+            console.log('[DEBUG ExpressCheckout] Updating customer with billing details...');
+            try {
+                await fetch(`${API_URL}/api/update-customer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: stripeCustomerId,
+                        email: billingDetails.email,
+                        name: billingDetails.name,
+                        phone: billingDetails.phone,
+                        address: billingDetails.address
+                    })
+                });
+                console.log('[DEBUG ExpressCheckout] Customer updated successfully');
+            } catch (err) {
+                console.error('[DEBUG ExpressCheckout] Error updating customer:', err);
+                // Continue anyway - don't block payment
+            }
         }
 
         const { error } = isSetupMode
@@ -2102,3 +2136,4 @@ function ExpressCheckouter({ isSetupMode }) {
         </div>
     );
 }
+
