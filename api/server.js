@@ -341,15 +341,47 @@ app.post('/api/create-subscription', async (req, res) => {
         let discountDeduction = 0;
         let couponId = null;
 
+        // Process discount logic
         if (discount) {
-            if (discount.discountMethod === 'fixed') {
-                discountDeduction = discount.discountValue * 100;
-            } else if (discount.discountMethod === 'percent') {
+            console.log(`[DEBUG] Processing discount: method=${discount.discountMethod}, value=${discount.discountValue}, code=${discount.code}`);
+
+            const isFixedDiscount = discount.discountMethod === 'fixed' || discount.discountMethod === 'fixed_amount';
+            const isPercentDiscount = discount.discountMethod === 'percent' || discount.discountMethod === 'percentage';
+            const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
+
+            if (isFixedDiscount) {
+                // Fixed amount discount
+                if (isOneTime && !hasAddOns) {
+                    // For pure one-time purchases, we deduct directly from the PaymentIntent amount
+                    // Cap the discount so total is at least $0.50 (Stripe minimum)
+                    const discountCents = discount.discountValue * 100;
+                    const maxDiscount = totalAmount - 50; // Leave at least 50 cents
+                    discountDeduction = Math.min(discountCents, Math.max(0, maxDiscount));
+                    if (discountCents > maxDiscount) {
+                        console.log(`[DEBUG] Fixed discount capped from ${discountCents} to ${discountDeduction} cents`);
+                    }
+                } else {
+                    // For subscriptions, create a fixed-amount coupon
+                    try {
+                        const coupon = await stripe.coupons.create({
+                            amount_off: Math.round(discount.discountValue * 100), // Convert to cents
+                            currency: 'usd',
+                            duration: 'once',
+                            name: `Discount ${discount.code}`
+                        });
+                        couponId = coupon.id;
+                        console.log(`[DEBUG] Created fixed-amount coupon: ${couponId}`);
+                    } catch (e) {
+                        console.error('Failed to create fixed-amount coupon:', e);
+                    }
+                }
+            } else if (isPercentDiscount) {
+                // Percentage discount
                 if (isOneTime && !hasAddOns) {
                     // For pure one-time, we calculate deduction manually
                     discountDeduction = Math.round(totalAmount * (discount.discountValue / 100));
                 } else {
-                    // For Subscription scenarios, create a one-time coupon
+                    // For Subscription scenarios, create a percent-off coupon
                     try {
                         const coupon = await stripe.coupons.create({
                             percent_off: parseFloat(discount.discountValue),
@@ -357,8 +389,9 @@ app.post('/api/create-subscription', async (req, res) => {
                             name: `Discount ${discount.code}`
                         });
                         couponId = coupon.id;
+                        console.log(`[DEBUG] Created percent-off coupon: ${couponId}`);
                     } catch (e) {
-                        console.error('Failed to create coupon:', e);
+                        console.error('Failed to create percent coupon:', e);
                     }
                 }
             }
@@ -401,17 +434,8 @@ app.post('/api/create-subscription', async (req, res) => {
         // Check if we have add-ons
         const hasAddOns = addOnPriceIds && Array.isArray(addOnPriceIds) && addOnPriceIds.length > 0;
 
-        // Apply Discount (if applicable and NOT pure one-time flow)
-        // For pure one-time flow (Scenario 2), we minimize the intent amount directly.
-        // For all others (involving Subscription), we use a negative Invoice Item (unless coupon is used).
-        if (discountDeduction > 0 && !(isOneTime && !hasAddOns) && !couponId) {
-            await stripe.invoiceItems.create({
-                customer: customer.id,
-                amount: -discountDeduction,
-                currency: 'usd',
-                description: `Discount (${discount.code})`
-            });
-        }
+        // NOTE: Discount for subscriptions is now applied via couponId on the subscription itself
+        // The old negative invoice item approach is removed as it was unreliable
 
         if (isOneTime && hasAddOns) {
             // Scenario 1: Main = One-time (with Quantity) + Add-ons = Subscription
@@ -584,10 +608,11 @@ app.post('/api/create-subscription', async (req, res) => {
 
             } else {
                 // Scenario 4: Main = Subscription - No Add-ons
+                console.log(`[DEBUG] Creating subscription with couponId: ${couponId}`);
                 const subscription = await stripe.subscriptions.create({
                     customer: customer.id,
                     items: [{ price: priceId }],
-                    ...(couponId && { coupon: couponId }),
+                    ...(couponId && { discounts: [{ coupon: couponId }] }),
                     payment_behavior: 'default_incomplete',
                     payment_settings: {
                         save_default_payment_method: 'on_subscription',
@@ -598,12 +623,13 @@ app.post('/api/create-subscription', async (req, res) => {
                 // Get the invoice and payment intent
                 let latestInvoice = subscription.latest_invoice;
                 paymentIntent = latestInvoice.payment_intent;
+                console.log(`[DEBUG] Invoice amount_due: ${latestInvoice.amount_due} cents, PaymentIntent amount: ${paymentIntent ? paymentIntent.amount : 'N/A'} cents`);
 
                 // Handle $0 Invoice
                 if (!paymentIntent && latestInvoice.amount_due === 0) {
                     const setupIntent = await stripe.setupIntents.create({
                         customer: customer.id,
-                        payment_method_types: ['card', 'link'],
+                        automatic_payment_methods: { enabled: true },
                         metadata: {
                             subscription_id: subscription.id,
                         },
@@ -611,28 +637,88 @@ app.post('/api/create-subscription', async (req, res) => {
                     responseData.clientSecret = setupIntent.client_secret;
                     responseData.isSetup = true;
                 } else {
-                    if (paymentIntent) {
-                        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
-                            automatic_payment_methods: { enabled: true },
-                            metadata: {
-                                invoice_id: latestInvoice.id,
-                                subscription_id: subscription.id,
-                            },
-                        });
-                    }
+                    // If the invoice doesn't have a PaymentIntent, we need to finalize it first
                     if (!paymentIntent && latestInvoice.amount_due > 0) {
-                        paymentIntent = await stripe.paymentIntents.create({
-                            amount: latestInvoice.amount_due,
-                            currency: latestInvoice.currency,
-                            customer: customer.id,
-                            metadata: {
-                                invoice_id: latestInvoice.id,
-                                subscription_id: subscription.id,
-                            },
-                            automatic_payment_methods: { enabled: true },
+                        console.log(`[DEBUG] Invoice ${latestInvoice.id} has no PaymentIntent. Checking invoice status: ${latestInvoice.status}`);
+
+                        if (latestInvoice.status === 'draft') {
+                            latestInvoice = await stripe.invoices.finalizeInvoice(latestInvoice.id);
+                            console.log(`[DEBUG] Invoice finalized. Status: ${latestInvoice.status}`);
+                        }
+
+                        const refreshedInvoice = await stripe.invoices.retrieve(latestInvoice.id, {
+                            expand: ['payment_intent']
                         });
+                        paymentIntent = refreshedInvoice.payment_intent;
+                        console.log(`[DEBUG] Retrieved PaymentIntent from invoice: ${paymentIntent ? paymentIntent.id : 'null'}`);
+
+                        if (!paymentIntent) {
+                            console.log(`[DEBUG] Creating fallback PaymentIntent for amount: ${latestInvoice.amount_due}`);
+                            paymentIntent = await stripe.paymentIntents.create({
+                                amount: latestInvoice.amount_due,
+                                currency: latestInvoice.currency,
+                                customer: customer.id,
+                                metadata: {
+                                    invoice_id: latestInvoice.id,
+                                    subscription_id: subscription.id,
+                                },
+                                automatic_payment_methods: { enabled: true },
+                            });
+                            console.log(`[DEBUG] Fallback PaymentIntent created: ${paymentIntent.id}`);
+                        }
                     }
-                    if (paymentIntent) responseData.clientSecret = paymentIntent.client_secret;
+
+                    if (paymentIntent) {
+                        // Check if the PaymentIntent amount matches the invoice amount
+                        // When coupons are applied, the PaymentIntent might have the pre-discount amount
+                        if (paymentIntent.amount !== latestInvoice.amount_due) {
+                            console.log(`[DEBUG] PaymentIntent amount (${paymentIntent.amount}) differs from invoice amount_due (${latestInvoice.amount_due}). Updating PI...`);
+                            try {
+                                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                                    amount: latestInvoice.amount_due,
+                                    metadata: {
+                                        invoice_id: latestInvoice.id,
+                                        subscription_id: subscription.id,
+                                    },
+                                });
+                                console.log(`[DEBUG] PaymentIntent amount updated to ${paymentIntent.amount} cents`);
+                            } catch (updateErr) {
+                                console.log(`[DEBUG] Could not update PaymentIntent amount: ${updateErr.message}`);
+                                // If we can't update, create a new one
+                                if (updateErr.message.includes('cannot be updated') || updateErr.code === 'payment_intent_unexpected_state') {
+                                    console.log(`[DEBUG] Creating new PaymentIntent with correct discounted amount...`);
+                                    paymentIntent = await stripe.paymentIntents.create({
+                                        amount: latestInvoice.amount_due,
+                                        currency: latestInvoice.currency,
+                                        customer: customer.id,
+                                        metadata: {
+                                            invoice_id: latestInvoice.id,
+                                            subscription_id: subscription.id,
+                                        },
+                                        automatic_payment_methods: { enabled: true },
+                                    });
+                                    console.log(`[DEBUG] New PaymentIntent created: ${paymentIntent.id} with amount ${paymentIntent.amount}`);
+                                }
+                            }
+                        } else {
+                            // Just update metadata if amounts match
+                            try {
+                                paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+                                    metadata: {
+                                        invoice_id: latestInvoice.id,
+                                        subscription_id: subscription.id,
+                                    },
+                                });
+                            } catch (updateErr) {
+                                console.log(`[DEBUG] Could not update PaymentIntent metadata: ${updateErr.message}`);
+                            }
+                        }
+                        responseData.clientSecret = paymentIntent.client_secret;
+                        console.log(`[DEBUG] Returning clientSecret for PI: ${paymentIntent.id}, amount: ${paymentIntent.amount} cents`);
+                    } else {
+                        console.error('[ERROR] Could not obtain PaymentIntent for subscription invoice');
+                        throw new Error('Failed to create payment intent for subscription. Please try again.');
+                    }
                 }
 
                 responseData.subscriptionId = subscription.id;
